@@ -1,4 +1,4 @@
-setwd("~/R_project/Extreme heat and cold")
+setwd("C:/Users/TMPACGAG/OneDrive - Birmingham City Council/Documents/R projects/PHM/Spatial Bayesian DNLM Extreme heat and cold")
 
 library(tidyverse)
 library(readr)

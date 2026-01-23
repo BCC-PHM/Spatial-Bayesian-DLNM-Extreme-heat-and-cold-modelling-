@@ -169,6 +169,89 @@ posterior_draws_for_acocks_green = cbind(data.frame(Percentage = names(x_temp[[i
 
 ggsave("figs/posterior_draws_for_acocks_green.jpg",posterior_draws_for_acocks_green, width=6, height=4, dpi =600,units = "in")
 
+################################################################################
+mmt_draws_by_ward = vector("list", 69)
+rr_mmt_centered  = vector("list", 69)
+
+
+for (i in 1:69){
+
+
+# Extract the posterior samples of the coefficients (e.g., from INLA or MCMC).
+# Dimensions: 1000 rows x 30 columns.
+beta_reg = cb_res[[i]]
+
+# Extract the cross-basis prediction matrix for this location.
+# Dimensions: 119 rows x 30 columns 
+cb_i = cb_pred[[i]]
+
+#
+
+rr = cb_i %*% t(beta_reg)
+
+
+# 3. Define Reference Temperature (Centering)
+# Find the index in the 'percentiles' vector corresponding to the 90th percentile.
+# This will be our reference point (RR = 1).
+i_cen = which(percentiles == 0.9)
+
+# Center the predictions.
+# For each simulation (column of rr), subtract the value at the reference index.
+# This ensures that at the 30th percentile, the log-RR is always 0.
+rr_cen = apply(rr, 2, function(x) x - x[i_cen])
+
+
+full_1000_rr = exp(rr_cen)
+
+
+# temperature grid used to compute RR
+temp_grid <- x_temp[[i]]
+
+# tocontraint temp bounds (change if needed)
+t_bounds = quantile(x_temp[[i]], probs = c(0.01, 0.99), na.rm = TRUE)
+
+# indices of grid points inside bounds
+ok_idx = x_temp[[i]] >= t_bounds[1] &  x_temp[[i]] <= t_bounds[2]
+
+
+#Get global indices once
+allowed_idx = which(ok_idx)
+
+
+
+#find the lowest RR for each simulated posterior from full_1000_rr
+
+min_RR_position =  apply(full_1000_rr[allowed_idx, , drop = FALSE],2, function(x) allowed_idx[ which.min(x) ])
+
+
+#initialise an empty dataframe to store each specific mmt below
+store_specific_mmt = matrix(nrow=length(x_temp[[i]]), ncol=1000)
+             
+
+for(n in 1:1000){ #for every simulated posterior 
+
+#apply the simulation-specific min rr to each col in the rr matrix to re-centre, after that, write in into the matrix
+store_specific_mmt[,n]= rr[,n]-rr[,n][min_RR_position[n]]
+
+
+
+
+}
+
+mmt_draws_by_ward[[i]] = data.frame(nsim = names(x_temp[[i]][min_RR_position]),
+                       MMT = as.numeric(x_temp[[1]][min_RR_position]),
+                       Ward_code = ward_map$Ward_Code[ward_map$Ward_Code == unique(df_complete$ward22cd[df_complete$new_id == i])],
+                       Ward_id = i
+)
+
+rr_mmt_centered[[i]] = exp(store_specific_mmt)
+
+}
+
+
+
+
+
 
 
 ######################################################################
