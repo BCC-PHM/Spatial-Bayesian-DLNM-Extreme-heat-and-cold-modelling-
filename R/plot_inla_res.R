@@ -66,8 +66,11 @@ for (i in 1:69) {
 }
 
 
-######################################################################
+###############################################################################
+#===============================================================================
 #plot all thje posterior draws for ward id 1 
+#===============================================================================
+
 
 cb_res[[1]]
 
@@ -170,6 +173,9 @@ posterior_draws_for_acocks_green = cbind(data.frame(Percentage = names(x_temp[[i
 ggsave("figs/posterior_draws_for_acocks_green.jpg",posterior_draws_for_acocks_green, width=6, height=4, dpi =600,units = "in")
 
 ################################################################################
+#===============================================================================
+#calculate ward sepcific mmt doe each posterior simulation for each ward
+#===============================================================================
 mmt_draws_by_ward = vector("list", 69)
 rr_mmt_centered  = vector("list", 69)
 
@@ -238,7 +244,7 @@ store_specific_mmt[,n]= rr[,n]-rr[,n][min_RR_position[n]]
 
 }
 
-mmt_draws_by_ward[[i]] = data.frame(nsim = names(x_temp[[i]][min_RR_position]),
+mmt_draws_by_ward[[i]] = data.frame(nsim = seq_len(ncol(rr)),
                        MMT = as.numeric(x_temp[[1]][min_RR_position]),
                        Ward_code = ward_map$Ward_Code[ward_map$Ward_Code == unique(df_complete$ward22cd[df_complete$new_id == i])],
                        Ward_id = i
@@ -249,12 +255,16 @@ rr_mmt_centered[[i]] = exp(store_specific_mmt)
 }
 
 
+write_rds(mmt_draws_by_ward, "output/mmt_draws_by_ward.rds")
 
 
+###############################################################################
+###############################################################################
+###############################################################################
+#===============================================================================
+#plot all the ward median exposure response curves
+#===============================================================================
 
-
-
-######################################################################
 RR_MMT_plot_list = list()
 
 
@@ -442,22 +452,6 @@ pdf_combine(
 )
 
 
-
-#################################################################################
-
-
-real_plot_df %>% 
-  filter(Ward_id == 1)
-
-
-
-
-
-
-
-
-
-
 #################################################################################
 #plot the mmt on the median of the ensemble response curve 
 
@@ -597,159 +591,15 @@ merged_1st_99th_RR_plot = tmap::tmap_arrange(RR_1st_map ,RR_99th_map )
 tmap_save(merged_1st_99th_RR_plot, filename ="figs/merged_1st_99th_RR_plot.png", height = 7,width =12, unit="in",dpi = 600)
 
 #################################################################################
-#calculate excess mortality \
-ward_id =1
-
-calc_excess_bayes = function(
-    df_complete,
-    cb_res,
-    ward_id,
-    temp_bounds = c(0.01, 0.99)
-) {
-  
-  # -----------------------------
-  # 1. Subset data for ward
-  # -----------------------------
-  df_w = df_complete[df_complete$new_id == ward_id, ]
-  
-  deaths = df_w$deaths
-  temp   = df_w$tasmean
-  year   = df_w$year
-  
-  X_day = as.matrix(df_w[, paste0("cb", 1:30)])   # daily CB matrix
-  
-  # -----------------------------
-  # 2. Temperature grid for MMT
-  # -----------------------------
-  t_lo = quantile(temp, temp_bounds[1], na.rm = TRUE)
-  t_hi = quantile(temp, temp_bounds[2], na.rm = TRUE)
-  
-  temp_grid = seq(t_lo, t_hi, by = 0.1)
-  
-  # build CB on grid 
-  cb_grid = crossbasis(
-    matrix(rep(temp_grid, 21 + 1), ncol = 21 + 1),
-    argvar = list(
-      fun   = "bs",
-      knots = quantile(temp, probs = c(0.1, 0.75, 0.9), na.rm = TRUE)
-    ),
-    arglag = list(
-      fun = "ns",
-      knots = logknots(lag_max, 3),
-      intercept = TRUE
-    )
-  )
-  
-  X_grid = as.matrix(cb_grid)
-  
-  # -----------------------------
-  # 3. Posterior draws
-  # -----------------------------
-  beta_mat = cb_res[[ward_id]]
-  n_draws  = nrow(beta_mat)
-  
-  years_u  = sort(unique(year))
-  
-  # storage (small!)
-  heat_year = matrix(NA, nrow = length(years_u), ncol = n_draws,
-                      dimnames = list(years_u, NULL))
-  cold_year = heat_year
-  
-  heat_total = numeric(n_draws)
-  cold_total = numeric(n_draws)
-  
-  # -----------------------------
-  # 4. Loop over posterior draws
-  # -----------------------------
-  for (b in seq_len(n_draws)) {
-    
-    beta_b = beta_mat[b, ]
-    
-    # daily log-risk
-    eta_day = drop(X_day %*% beta_b)
-    
-    # grid log-risk → MMT
-    eta_grid = drop(X_grid %*% beta_b)
-    
-    i_mmt    = which.min(eta_grid)  #reference mmt
-    eta_ref  = eta_grid[i_mmt]
-    mmt_b    = temp_grid[i_mmt]
-    
-    # daily RR
-    RR_day = exp(eta_day - eta_ref)
-    
-    # daily attributable deaths
-    attr_day = deaths * (RR_day - 1) / RR_day
-    
-    # heat / cold masks
-    is_heat = temp > mmt_b
-    is_cold = temp < mmt_b
-    
-    # yearly aggregation
-    heat_year[, b] = tapply(
-      attr_day[is_heat],
-      factor(year[is_heat], levels = years_u),
-      sum,
-      na.rm = TRUE
-    )
-    
-    cold_year[, b] = tapply(
-      attr_day[is_cold],
-      factor(year[is_cold], levels = years_u),
-      sum,
-      na.rm = TRUE
-    )
-    
-
-    
-    # whole-period totals
-    heat_total[b] = sum(attr_day[is_heat], na.rm = TRUE)
-    cold_total[b] = sum(attr_day[is_cold], na.rm = TRUE)
-  }
-  
-  # -----------------------------
-  # 5. Summaries
-  # -----------------------------
-  summarise_draws = function(x) {
-    c(
-      median = median(x, na.rm = TRUE),
-      lo     = quantile(x, 0.025, na.rm = TRUE),
-      hi     = quantile(x, 0.975, na.rm = TRUE)
-    )
-  }
-  
-  summary = list(
-    yearly = list(
-      heat = t(apply(heat_year, 1, summarise_draws)),
-      cold = t(apply(cold_year, 1, summarise_draws))
-    ),
-    total = list(
-      heat = summarise_draws(heat_total),
-      cold = summarise_draws(cold_total)
-    )
-  )
-  
-  draws = list(
-    yearly = list(
-      heat = heat_year,
-      cold = cold_year
-    ),
-    total = list(
-      heat = heat_total,
-      cold = cold_total
-    )
-  )
-  
-  return(list(
-    draws   = draws,
-    summary = summary
-  ))
-}
+#################################################################################
+#################################################################################
 
 
-excess_check = calc_excess_bayes(df_complete = df_complete,
-                  cb_res      = cb_res,
-                  ward_id     = 20)
+
+
+
+
+
 
 
 

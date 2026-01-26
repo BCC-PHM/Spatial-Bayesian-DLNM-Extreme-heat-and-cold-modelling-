@@ -4,6 +4,8 @@ library(readr)
 library(dlnm)
 library(tidyverse)
 library(sf)
+library(tmap)
+library(readxl)              
 ###################################################################################
 
 #load the data
@@ -85,6 +87,7 @@ stopifnot(ncol(cb_daily) == ncol(beta_reg))
 
 # ==============================================================
 # DLNM prediction setup
+# Warning:: long running time!
 # ==============================================================
 #covert at to numeric matrix [number of days(2853) x number of lags(22)]
 at_mat = as.matrix(at)
@@ -207,50 +210,242 @@ excess_mortality_daily_by_ward[[i]] = AN_daily
 
 }
 
+write_rds(excess_mortality_daily_by_ward, "output/excess_mortality_daily_by_ward.rds")
 
 ##########################################################
-#total excess deaths for ward i
-testing = data.frame(
-  Date = df_w$date[ok],
-  Ward_code = unique(df_w$ward22cd[df_w$new_id ==1]),
-  daily_tasmean = df_w$tasmean[ok]
+#==================================================================
+#total excess deaths for ward 
+# posterior distributions (lists of length 69)
+heat_annual_post = vector("list", 69)
+cold_annual_post = vector("list", 69)
+
+# summary table
+ward_EM_summary = data.frame(
+  Ward_id   = integer(69),
+  Ward_code = character(69),
   
-) %>% 
-  mutate(temp_class= case_when(
-    daily_tasmean > cen ~ "heat",
-    daily_tasmean < cen ~ "cold",
-    TRUE                    ~ "atMMT"
-  ),
-  day_id = row_number(),
-  year = year(Date))
-
-####################################################
-
-is_cold = testing$temp_class == "cold"
-
-cold_EM = testing %>% 
-  filter(temp_class == "cold") 
+  heat_med  = numeric(69),
+  heat_LL   = numeric(69),
+  heat_UL   = numeric(69),
+  
+  cold_med  = numeric(69),
+  cold_LL   = numeric(69),
+  cold_UL   = numeric(69)
+)
 
 
-AN_cold_daily  =  AN_daily
-AN_cold_daily[!is_cold, ] = 0
+
+for (i in 1:69) {
+  
+  # --------------------------------------------------
+  # Ward-specific data
+  # --------------------------------------------------
+  df_w = df_complete[df_complete$new_id == i, ]
+  obs_deaths = df_w$deaths
+  
+  at = df_w %>%
+    select(tasmean, contains("lag")) %>%
+    rename(lag0 = tasmean)
+  
+  ok = seq_len(nrow(at)) > 21 & !is.na(obs_deaths)
+  
+  testing = data.frame(
+    Date = as.Date(df_w$date[ok]),
+    year = year(as.Date(df_w$date[ok])),
+    daily_tasmean = df_w$tasmean[ok],
+    Ward_code = unique(df_w$ward22cd)
+  )
+  
+  n_years = length(unique(testing$year))
+  
+  # --------------------------------------------------
+  # Ward-specific MMT (posterior)
+  # --------------------------------------------------
+  mmt_i = MMT[[i]] %>%
+    arrange(nsim) %>%
+    pull(MMT)
+  
+  nsim = length(mmt_i)
+  nday = nrow(testing)
+  
+  # temperature classification per posterior draw
+  temp_class_mat = matrix(NA_character_, nrow = nday, ncol = nsim)
+  
+  for (j in 1:nsim) {
+    temp_class_mat[, j] = ifelse(
+      testing$daily_tasmean > mmt_i[j], "heat",
+      ifelse(testing$daily_tasmean < mmt_i[j], "cold", "atMMT")
+    )
+  }
+  
+  # --------------------------------------------------
+  # Daily excess mortality (already computed)
+  # --------------------------------------------------
+  EM_for_ward_i = excess_mortality_daily_by_ward[[i]]
+  
+  heat_annual_i = numeric(nsim)
+  cold_annual_i = numeric(nsim)
+  
+  for (j in 1:nsim) {
+    
+    AN_j   = EM_for_ward_i[, j]
+    temp_j = temp_class_mat[, j]
+    
+    heat_total_j = sum(AN_j[temp_j == "heat"], na.rm = TRUE)
+    cold_total_j = sum(AN_j[temp_j == "cold"], na.rm = TRUE)
+    
+    heat_annual_i[j] = heat_total_j / n_years
+    cold_annual_i[j] = cold_total_j / n_years
+  }
+  
+  # --------------------------------------------------
+  # Store posterior distributions
+  # --------------------------------------------------
+  heat_annual_post[[i]] = heat_annual_i
+  cold_annual_post[[i]] = cold_annual_i
+  
+  # --------------------------------------------------
+  # Store summary statistics (median + 95% CrI)
+  # --------------------------------------------------
+  ward_EM_summary$Ward_id[i]   = i
+  ward_EM_summary$Ward_code[i] = unique(testing$Ward_code)
+  
+  ward_EM_summary$heat_med[i] = median(heat_annual_i)
+  ward_EM_summary$heat_LL[i]  = quantile(heat_annual_i, 0.025)
+  ward_EM_summary$heat_UL[i]  = quantile(heat_annual_i, 0.975)
+  
+  ward_EM_summary$cold_med[i] = median(cold_annual_i)
+  ward_EM_summary$cold_LL[i]  = quantile(cold_annual_i, 0.025)
+  ward_EM_summary$cold_UL[i]  = quantile(cold_annual_i, 0.975)
+}
 
 
-cold_yearly_sim =testing %>%
-  group_by(year) %>%
-  summarise(
-    cold_sim = list(colSums(AN_cold_daily[day_id, , drop = FALSE])),
-    .groups = "drop"
+write_rds(heat_annual_post,"output/heat_annual_post_EM_ward.rds")
+write_rds(cold_annual_post,"output/cold_annual_post_EM_ward.rds")
+write_rds(ward_EM_summary, "heat_and_cold_related_EM_ward.rds")
+
+##########################################################################
+#====================================================================
+#calculate per 100,000 rate
+#--------------------------------------------------------------------
+
+ward_pop = read_excel("data/external/population/sapewardstablefinal.xlsx", 
+           sheet = "Mid-2022 Ward 2022", skip = 3)
+
+
+ward_pop = ward_pop %>% 
+  filter(`LAD 2022 Name` == "Birmingham") %>% 
+  pivot_longer(cols = c(-`LAD 2022 Name`,-`LAD 2022 Name`,-`Ward 2022 Code`,-`Ward 2022 Name`,-Total,
+                        -`LAD 2022 Code`),
+               names_to = "age",
+               values_to = "count") %>% 
+  group_by(`Ward 2022 Code`,`Ward 2022 Name`) %>% 
+  summarise(count = sum(count)) %>% 
+  rename(Ward_code = `Ward 2022 Code`,
+         Ward_name = `Ward 2022 Name`) %>% 
+  left_join(ward_EM_summary, by ="Ward_code") %>%  #join em summary with pop estimate
+  group_by(Ward_code, Ward_name, Ward_id) %>% 
+  #standardisation
+  mutate(heat_med = heat_med/count*100000,
+         heat_LL = heat_LL/count*100000,
+         heat_UL = heat_UL/count*100000,
+         cold_med = cold_med/count*100000,
+         cold_LL = cold_LL/count*100000,
+         cold_UL = cold_UL/count*100000
+         )
+
+#plot the map
+
+
+
+tmap_mode("plot")
+
+cold_related_em = tm_shape(ward_map %>% 
+           left_join(ward_pop, by = c("Ward_Code"="Ward_code")))+
+  tm_polygons(
+    fill= "cold_med",
+    fill.scale = tm_scale_continuous(values = "blues"),
+    fill.legend = tm_legend("per 100,000", group_id = "top", frame = FALSE,bg.alpha=0)
+  )+
+  tm_layout(
+    title.size = 1.2,
+    legend.position = c(0.02, 0.92),
+    frame = FALSE,
+    inner.margins = c(0.07, 0, 0.15, 0) # Increased bottom margin (3rd number) to make room for caption
+  ) +
+  tm_title("Annual Posterior Median Cold-related Excess Mortality Rate")+
+  tm_credits(text = "Median cold-related excess mortlity rate at the ward temperature distribution compared with the \nward-specific MMTs that were used as couterfactual at each posterior simulation.", 
+             position = c("LEFT","TOP"))+
+  tm_compass(type = "8star",
+             size = 4,
+             position = c("RIGHT", "bottom"),
+             color.light = "white")+
+  tm_credits(
+    text = paste("Contains OS data \u00A9 Crown copyright and database right",
+                 # Get current year
+                 format(Sys.Date(), "%Y"),
+                 ". Source:\nOffice for National Statistics licensed under the Open Government Licence v.3.0."),
+    position = c("LEFT", "BOTTOM")
   )
 
 
-cold_EM = cold_yearly_sim %>%
-  mutate(
-    EM_median = sapply(cold_sim, median),
-    EM_LL     = sapply(cold_sim, quantile, 0.025),
-    EM_UL     = sapply(cold_sim, quantile, 0.975)
-  ) %>%
-  select(year, EM_median, EM_LL, EM_UL)
+tmap_save(cold_related_em,filename = "figs/cold_related_em.png", height = 7,width =6, unit="in",dpi = 600 )
+
+
+
+heat_related_em = tm_shape(ward_map %>% 
+                             left_join(ward_pop, by = c("Ward_Code"="Ward_code")))+
+  tm_polygons(
+    fill= "heat_med",
+    fill.scale = tm_scale_continuous(values = "reds"),
+    fill.legend = tm_legend("per 100,000", group_id = "top", frame = FALSE,bg.alpha=0)
+  )+
+  tm_layout(
+    title.size = 1.2,
+    legend.position = c(0.02, 0.92),
+    frame = FALSE,
+    inner.margins = c(0.07, 0, 0.15, 0) # Increased bottom margin (3rd number) to make room for caption
+  ) +
+  tm_title("Annual Posterior Median Heat-related Excess Mortality Rate")+
+  tm_credits(text = "Median heat-related excess mortlity rate at the ward temperature distribution compared with the \nward-specific MMTs that were used as couterfactual at each posterior simulation.", 
+             position = c("LEFT","TOP"))+
+  tm_compass(type = "8star",
+             size = 4,
+             position = c("RIGHT", "bottom"),
+             color.light = "white")+
+  tm_credits(
+    text = paste("Contains OS data \u00A9 Crown copyright and database right",
+                 # Get current year
+                 format(Sys.Date(), "%Y"),
+                 ". Source:\nOffice for National Statistics licensed under the Open Government Licence v.3.0."),
+    position = c("LEFT", "BOTTOM")
+  )
+
+
+
+
+tmap_save(heat_related_em,filename = "figs/heat_related_em.png", height = 7,width =6, unit="in",dpi = 600 )
+
+
+##############################################################################################################
+#calcualte extreme heat and cold
+#only use to >=95% temp for extreme heat
+#only use <=5 % temp for extreme cold
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
