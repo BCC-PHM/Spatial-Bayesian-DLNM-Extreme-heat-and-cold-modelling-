@@ -390,8 +390,8 @@ cold_related_em = tm_shape(ward_map %>%
     frame = FALSE,
     inner.margins = c(0.07, 0, 0.15, 0) # Increased bottom margin (3rd number) to make room for caption
   ) +
-  tm_title("Annual Posterior Median Cold-related Excess Mortality Rate")+
-  tm_credits(text = "Median cold-related excess mortlity rate at the ward temperature distribution compared with the \nward-specific MMTs that were used as couterfactual at each posterior simulation.", 
+  tm_title("Posterior Median Estimates of Annual Cold-Related Excess Mortality")+
+  tm_credits(text = "Median cold-related excess mortality rate, calculated by comparing observed ward temperatures to \nward-specific MMTs (used as counterfactuals across posterior simulations)", 
              position = c("LEFT","TOP"))+
   tm_compass(type = "8star",
              size = 4,
@@ -423,8 +423,8 @@ heat_related_em = tm_shape(ward_map %>%
     frame = FALSE,
     inner.margins = c(0.07, 0, 0.15, 0) # Increased bottom margin (3rd number) to make room for caption
   ) +
-  tm_title("Annual Posterior Median Heat-related Excess Mortality Rate")+
-  tm_credits(text = "Median heat-related excess mortlity rate at the ward temperature distribution compared with the \nward-specific MMTs that were used as couterfactual at each posterior simulation.", 
+  tm_title("Posterior Median Estimates of Annual Heat-Related Excess Mortality")+
+  tm_credits(text = "Median heat-related excess mortality rate, calculated by comparing observed ward temperatures to \nward-specific MMTs (used as counterfactuals across posterior simulations)", 
              position = c("LEFT","TOP"))+
   tm_compass(type = "8star",
              size = 4,
@@ -444,8 +444,12 @@ heat_related_em = tm_shape(ward_map %>%
 tmap_save(heat_related_em,filename = "figs/heat_related_em.png", height = 7,width =6, unit="in",dpi = 600 )
 
 
+#merge the plots
+merged_cold_heat_em = tmap_arrange(cold_related_em,heat_related_em )
+tmap_save(merged_cold_heat_em, filename ="figs/merged_cold_heat_em.png",height = 7,width =12, unit="in",dpi = 600)
+
 ##############################################################################################################
-#calcualte extreme heat and cold
+#calculate extreme heat and cold
 #only use to >=95% temp for extreme heat
 #only use <=5 % temp for extreme cold
 
