@@ -647,12 +647,12 @@ p =batch_data %>%
   geom_density(lwd = 1,colour = "#578f9f", 
                fill = "#83b3c0",alpha = 0.5,adjust = 1)+
   geom_vline(xintercept = 18)+
-  geom_segment(aes(x = 18, y = ymax*1.2, xend = 28, yend = ymax*1.2),
+  geom_segment(aes(x = 18, y = ymax*1.18, xend = 28, yend = ymax*1.18),
                arrow = arrow(type = "open", length = unit(0.1, "cm")),
                linewidth = 0.15)+
   geom_text(aes(x = 19, y = ymax*1.3, label = label_pr18),
             hjust = 0, size = 2.5, inherit.aes = FALSE,fontface = "bold")  +
-  geom_text(aes(x = -5, y = ymax*1.1, label = label_crI),
+  geom_text(aes(x = -5, y = ymax*1.3, label = label_crI),
             hjust = 0, size = 2.5, inherit.aes = FALSE)  +
   scale_x_continuous(breaks = seq(-5, 30, 5)) +
   scale_y_continuous(expand = expansion(mult = c(0, 0.15)))+
@@ -677,6 +677,18 @@ message(paste("Saved:", filename, "(Height:", round(dynamic_height, 1), "mm)"))
 }
 
 
+# merged the files (optional)
+pdf_combine(
+  input = c("figs/MMT_uncertainty_ward_plots_1_to_15.pdf",
+            "figs/MMT_uncertainty_ward_plots_16_to_30.pdf",
+            "figs/MMT_uncertainty_ward_plots_31_to_45.pdf",
+            "figs/MMT_uncertainty_ward_plots_46_to_60.pdf",
+            "figs/MMT_uncertainty_ward_plots_61_to_69.pdf"),
+  output = "figs/Combined_MMT_uncertainty_wards.pdf"
+)
+
+
+#--------------------------------------------------------
 
 
 
@@ -692,83 +704,5 @@ message(paste("Saved:", filename, "(Height:", round(dynamic_height, 1), "mm)"))
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-# # Plot with MMT as the reference
-# plot(
-#   x_temp[[i]], RR_med_mmt, type = "l", log = "y",
-#   ylim = range(RR_lo_mmt, RR_hi_mmt),
-#   xlab = "Temperature", ylab = "Relative Risk (Ref = MMT)",
-#   main = paste("RR centered at MMT:", round(mmt_value, 1))
-# )
-# lines(x_temp[[i]], RR_lo_mmt, lty = 2)
-# lines(x_temp[[i]], RR_hi_mmt, lty = 2)
-# abline(h = 1)
-# abline(v = mmt_value, col = "red", lty = 3) # Mark the MMT
-
-
-
-###################################################################
-# rr is [n_temp × n_draws]
-# transpose so each column = one posterior draw (if needed)
-# Here rr rows = temp, cols = draws → good
-
-i=24
-
-temp_bounds = quantile(x_temp[[i]], probs = c(0, 1), na.rm = TRUE)
-
-# Iterate through every simulation (column of rr)
-mmt_draws_constrained = apply(rr, 2, function(rr_draw) {
-  
-  # A. Create a "fair" uniform grid based on the current ward's range
-  # Spaced every 0.1°C (or 0.05°C for higher precision)
-  fair_grid = seq(min(x_temp[[i]]), max(x_temp[[i]]), by = 0.1)
-  
-  # B. Interpolate the biased 'rr_draw' onto this new fair grid
-  # approx() connects the dots linearly; spline() is smoother but approx is usually sufficient
-  rr_fair = approx(x = x_temp[[i]], y = rr_draw, xout = fair_grid)$y
-  
-  # C. Apply the valid boundary constraints to the FAIR grid
-  # We only look for the minimum inside the safe 1-99% zone
-  ok = fair_grid >= temp_bounds[1] & fair_grid <= temp_bounds[2]
-  
-  # D. Find the minimum index within the valid, fair subset
-  valid_fair_grid = fair_grid[ok]
-  valid_rr_fair   = rr_fair[ok]
-  
-  i_min = which.min(valid_rr_fair)
-  
-  # E. Return the temperature at that minimum
-  return(valid_fair_grid[i_min])
-})
-
-# 3. Calculate Stats for Plotting
-mmt_median = median(mmt_draws_constrained)
-mmt_cri    = coda::HPDinterval(coda::as.mcmc(mmt_draws_constrained), prob = 0.90)
-
-
-
-data.frame(mmt_draws_constrained ) %>% 
-  ggplot(aes(x=mmt_draws_constrained ))+
-  geom_histogram(aes(y = after_stat(density)), 
-                 colour = "grey40", 
-                 fill = "grey90")+
-  geom_density(lwd = 1,colour = "#578f9f", 
-               fill = "#83b3c0",, alpha = 0.5)+
-  geom_vline(xintercept=mmt_median,size=1,colour = "black",lwd = 1.2)+
-  scale_x_continuous(breaks = seq(-5, 30, 5)) +
-  coord_cartesian(xlim = c(-5, 30)) +
-  
-  theme_classic()
 
 
