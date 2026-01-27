@@ -5,7 +5,9 @@ library(dlnm)
 library(tidyverse)
 library(sf)
 library(tmap)
-library(readxl)              
+library(readxl)        
+library(doParallel)
+library(foreach)
 ###################################################################################
 
 #load the data
@@ -22,9 +24,13 @@ MMT = read_rds("output/mmt_draws_by_ward.rds")
 ####################################################################################
 ward_specific_cumul_RR = list()
 
+cat("Starting cumulative RR calculation for 69 wards...\n")
+
 for (i in 1:69){
   
-  
+  cat("\n--------------------------------------------------\n")
+  cat(sprintf("Ward %d / 69 started at %s\n", i, Sys.time()))
+  cat("--------------------------------------------------\n")
 
 # ==============================================================
 # Ward-specific posterior inputs
@@ -120,6 +126,9 @@ ok = seq_len(N) > 21 & !is.na(obs_deaths)
 cumlogRR = matrix(NA, nrow = sum(ok), ncol = 1000)
 # ------------------------------------------------------------------
 
+cat(sprintf("Ward %d: %d valid days after lag exclusion\n", i, sum(ok)))
+cat("Running 1000 posterior simulations...\n")
+
 for (j in 1:1000) {
 # ------------------------------------------------------------------
 # mkXpred() rebuilds the DLNM design matrix using the observed
@@ -169,7 +178,15 @@ for (j in 1:1000) {
   
 ward_specific_cumul_RR[[i]] = cumlogRR
 
+cat(sprintf("Ward %d completed at %s\n", i, Sys.time()))
+
 }
+
+cat("\n==============================================\n")
+cat("ALL WARDS COMPLETED SUCCESSFULLY \n")
+cat(sprintf("Finished at %s\n", Sys.time()))
+cat("==============================================\n")
+
 
 write_rds(ward_specific_cumul_RR, "output/ward_specific_cumul_RR.rds")
 

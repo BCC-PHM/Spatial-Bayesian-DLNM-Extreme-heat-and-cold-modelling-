@@ -1,0 +1,35 @@
+---
+title: "Spatial Bayesian Distributed lag non-linear model for temperature-related mortality in Birmingham "
+author: "Chung Au-Yeung"
+bibliography: "references.bib"
+csl: elsevier-vancouver
+editor: visual
+execute:
+  echo: false
+  message: false
+  warning: false
+  fig-width: 10
+  fig-height: 8
+format: 
+  html:
+    embed-resources: true
+    toc: true
+    toc-location: left
+    number-sections: true
+---
+
+## Introduction
+
+The aim of this study was to analyse the association between air temperature and all-cause mortality particularly for Birmingham and to demonstrate the application of Spatial Bayesian distributed lag non-linear model (SB-DLNM) for estimating temperature-mortality relationships at fine geographical level with limited data. Using Birmingham as a case study, this framework can be replicated by other local authorities or cities, both in UK and internationally, to guide their local public health policies.
+
+## Methods
+
+### Data
+
+Daily all-cause mortality data in Birmingham were extracted from the death register table that was stored in the Birmingham and Solihull Aristotle data warehouse. The dataset covered the period between 01/01/2014 and 31/12/2024 and and included the electoral ward of residence for each deceased individual.To restrict the analysis to Birmingham residents, only those associated with a valid Birmingham ward code were included in the analysis. To avoid bias in the assessment of temperature-related mortality, individuals whose underlying cause of death was COVID-19 (ICD-10 codes U07.1, U07.2) were removed to account for the inflated deaths during the pandemic period. Therefore, a total of 94,684 deaths during the study period were used for analysis..
+
+During the same study period, the daily maximum and minimum values of air temperature on 1 km grid across UK were obtained from the HadUK-Grid database, produced by the UK Meteorological Office. The UK-wide grid data were then spatially subset to Birmingham by cropping and masking the raster layer using the dissolved polygon to exclude all cells outside Birmingham. Daily ward-level minimum and maximum air temperature were calculated using the area-weighted average of the grid cells intersecting each ward polygon. Finally, the daily ward-level mean values of air temperature were derived from the average of the daily ward-level minimum and maximum air temperature.
+
+### Modelling approach
+
+### Statistical analysis

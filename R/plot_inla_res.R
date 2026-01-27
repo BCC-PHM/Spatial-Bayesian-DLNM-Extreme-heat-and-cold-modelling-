@@ -245,7 +245,7 @@ store_specific_mmt[,n]= rr[,n]-rr[,n][min_RR_position[n]]
 }
 
 mmt_draws_by_ward[[i]] = data.frame(nsim = seq_len(ncol(rr)),
-                       MMT = as.numeric(x_temp[[1]][min_RR_position]),
+                       MMT = as.numeric(x_temp[[i]][min_RR_position]),
                        Ward_code = ward_map$Ward_Code[ward_map$Ward_Code == unique(df_complete$ward22cd[df_complete$new_id == i])],
                        Ward_id = i
 )
@@ -593,11 +593,88 @@ tmap_save(merged_1st_99th_RR_plot, filename ="figs/merged_1st_99th_RR_plot.png",
 #################################################################################
 #################################################################################
 #################################################################################
+# MMT = mmt_draws_by_ward
 
 
+mmt_uncertainty_plot_df = data.table::rbindlist(MMT) %>% 
+  group_by(Ward_code,Ward_id) %>% 
+  mutate(
+    prob_gt_18 = round(mean(MMT > 18, na.rm = TRUE)*100,1),
+    upperCrI = quantile(MMT, 0.975),
+    lowerCrI = quantile(MMT, 0.025),
+    label_pr18 = paste0("Pr(MMT>18) ", "\n= ", prob_gt_18, "%"),
+    label_crI = paste0("MMT CrI ", "95%: ", "(",round(lowerCrI,1), ", ", round(upperCrI,1),")"),
+    bin_boundary = floor(min(MMT, na.rm = TRUE)),
+    ymax = max(
+      c(hist(MMT,
+            breaks = seq(floor(min(MMT)), ceiling(max(MMT)), by = 1),
+            plot   = FALSE)$density,
+        # kernel density heights
+        density(MMT, adjust = 1)$y), na.rm = TRUE),
+    .groups = "drop"
+  )%>% 
+  mutate(label_pr18 = ifelse(nsim ==1, label_pr18, NA),
+         label_crI = ifelse(nsim ==1, label_crI, NA)) %>% 
+  left_join(ward_map, by = c("Ward_code" = "Ward_Code"))
 
+#--------------------------------------------------------
 
+starts = seq(1, 69, by = 15)
 
+# Loop through each batch
+for (start_id in starts) {
+  
+  # Calculate the range for this batch
+  end_id = min(start_id + 14, 69)
+  current_ids = start_id:end_id
+  
+  # Filter data
+  batch_data = subset(mmt_uncertainty_plot_df, Ward_id %in% current_ids)
+  
+  # Calculate dynamic height 
+  # Count how many unique wards are in this batch
+  n_wards = length(unique(batch_data$Ward_id))
+  # Calculate rows needed (round up division by 3)
+  n_rows = ceiling(n_wards / 3)
+  
+
+p =batch_data %>% 
+  ggplot(aes(x=MMT))+
+  geom_histogram(aes(y = after_stat(density)), 
+                 colour = "grey40", 
+                 fill = "grey90",
+                 binwidth = 1)+
+  geom_density(lwd = 1,colour = "#578f9f", 
+               fill = "#83b3c0",alpha = 0.5,adjust = 1)+
+  geom_vline(xintercept = 18)+
+  geom_segment(aes(x = 18, y = ymax*1.2, xend = 28, yend = ymax*1.2),
+               arrow = arrow(type = "open", length = unit(0.1, "cm")),
+               linewidth = 0.15)+
+  geom_text(aes(x = 19, y = ymax*1.3, label = label_pr18),
+            hjust = 0, size = 2.5, inherit.aes = FALSE,fontface = "bold")  +
+  geom_text(aes(x = -5, y = ymax*1.1, label = label_crI),
+            hjust = 0, size = 2.5, inherit.aes = FALSE)  +
+  scale_x_continuous(breaks = seq(-5, 30, 5)) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.15)))+
+  coord_cartesian(xlim = c(-5, 30))+
+  labs(x="Temperature °C",
+       y="Density posterior distribution MMT")+
+  theme_classic(base_size = 11)+
+  theme(plot.margin = unit(c(0.5, 0.5, 0.5, 0.5), "cm"),
+        legend.position = "none")+
+  facet_wrap(~ Ward_Name, ncol = 3, scales = 'free') 
+
+# --- STEP 3: Save with Dynamic Height ---
+# If a full page (5 rows) is 297mm, then one row is approx 59.4mm.
+# We calculate the height required for the current number of rows.
+dynamic_height = 297 * (n_rows / 5)
+
+filename = paste0("figs/","MMT_uncertainty_ward_plots_", start_id, "_to_", end_id, ".pdf")
+
+ggsave(filename, plot = p, width = 210, height = dynamic_height, units = "mm")
+
+message(paste("Saved:", filename, "(Height:", round(dynamic_height, 1), "mm)"))
+}
 
 
 
