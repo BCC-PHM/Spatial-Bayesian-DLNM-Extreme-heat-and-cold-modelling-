@@ -339,12 +339,16 @@ for (i in 1:69) {
 
 write_rds(heat_annual_post,"output/heat_annual_post_EM_ward.rds")
 write_rds(cold_annual_post,"output/cold_annual_post_EM_ward.rds")
-write_rds(ward_EM_summary, "heat_and_cold_related_EM_ward.rds")
+write_rds(ward_EM_summary, "output/heat_and_cold_related_EM_ward.rds")
 
 ##########################################################################
 #====================================================================
 #calculate per 100,000 rate
 #--------------------------------------------------------------------
+
+ward_EM_summary = read_rds("output/heat_and_cold_related_EM_ward.rds")
+
+
 
 ward_pop = read_excel("data/external/population/sapewardstablefinal.xlsx", 
            sheet = "Mid-2022 Ward 2022", skip = 3)
@@ -370,6 +374,9 @@ ward_pop = ward_pop %>%
          cold_LL = cold_LL/count*100000,
          cold_UL = cold_UL/count*100000
          )
+
+print(ward_pop, n=69)
+
 
 #plot the map
 

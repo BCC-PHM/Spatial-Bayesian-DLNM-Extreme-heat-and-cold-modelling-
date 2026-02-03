@@ -2,7 +2,7 @@
 title: "Spatial Bayesian Distributed lag non-linear model for temperature-related mortality in Birmingham "
 author: "Chung Au-Yeung"
 bibliography: "references.bib"
-csl: elsevier-vancouver
+csl: csl/elsevier-vancouver.csl
 editor: visual
 execute:
   echo: false
@@ -20,7 +20,7 @@ format:
 
 ## Introduction
 
-The aim of this study was to analyse the association between air temperature and all-cause mortality particularly for Birmingham and to demonstrate the application of Spatial Bayesian distributed lag non-linear model (SB-DLNM) for estimating temperature-mortality relationships at fine geographical level with limited data. Using Birmingham as a case study, this framework can be replicated by other local authorities or cities, both in UK and internationally, to guide their local public health policies.
+The aim of this study was to analyse the association between air temperature and all-cause mortality particularly for Birmingham and to demonstrate the application of spatial Bayesian distributed lag non-linear models (SB-DLNMs) for estimating temperature-mortality relationships at fine geographical level with limited data. Using Birmingham as a case study, this framework can be replicated by other local authorities or cities, both in UK and internationally, to guide their local public health policies.
 
 ## Methods
 
@@ -32,4 +32,55 @@ During the same study period, the daily maximum and minimum values of air temper
 
 ### Modelling approach
 
+This analysis adopted the extension of the Bayesian distributed lag non-linear models (DLNMs) to the spatial Bayesian DLNMs (SB-DLNMs) as demonstrated in recent methodological study [@sbdlnm_marcos2024]. For each day $d$ and ward $w$ in Birmingham, let $Y_{d,w}$ denote the observed number of deaths for all causes. The association between ambient air temperature and all-cause mortality was modelled using a Poisson likelihood with a log-link function:
+
+$$
+Y_{d,w} \sim \text{Poisson}(\lambda_{d,w})
+$$
+
+$$
+\log(\lambda_{d,w})=\alpha_{s(d,w)}+\sum_{c=1}^{n_c} \beta_{w,c}\, CB_{d,w,c}
+$$
+
+where $\alpha_{s(d,w)}$ denotes the stratum-specific intercepts under the use of case-crossover design, which is a methodology framework extensively used in environmental epidemiology [@casecrossover_2024]. In order to control for long-term trends, seasonality, and ward-specific time-invariant confounding, the data were stratified by ward, year, month and day of week, such that daily temperature and all-cause mortality in a given ward were compared exclusively with observations from the same ward on the same day of the week, within the same month and year. It has to be noted that strata with zero observed deaths were excluded from the model because they do not contribute to the likelihood and provide no information for parameter estimation; $CB_{d,w,c}$ is the cross-basis matrix that captures the non-linear relationship between temperature and mortality across a range of lags. Two separate spline basis functions were specified for the temperature and lag dimensions. With regards to the exposure-response space, cubic B-splines were selected with internal knots placing at the 10th, 75th and the 90th percentiles of the temperature range. For the lag-response space, natural cubic splines were used with three internal knots placed at equally spaced values on the log scale, including an intercept. A lag window of 0-21 days was chosen to capture the delayed effect of cold and the short-term mortality displacement from the heat effect. The specification for both basis functions followed previously established practice in the literature [@gasparrini2022smallarea].
+
+$$
+\beta_{w,c} = \beta_c + \beta^{*}_{w,c}
+$$
+
+$$
+\beta^{*}_{w,c}=\frac{1}{\sqrt{\tau_c}}\left(\sqrt{1-\phi_c}\, v_{w,c}+\sqrt{\phi_c}\, u_{w,c}\right)
+$$
+
+Modelling for a single local authority at fine geographical level often results in extremely high variance and unreliable estimates. To mitigate this, it is assumed that neighbouring wards share similar characteristics that contribute to their underlying mortality risk. The spatial dependency was modelled within a Bayesian hierarchical framework using the Besag–York–Mollié 2 model (BYM2), by incorporating the spatial structure directly into the ward-specific cross-basis coefficients $\beta_{w,c}$ of the cross-basis matrix $CB$. To define spatial neighbourhood, queen contiguity was specified such that wards were considered as adjacent if they shared either a long border or just a single corner. Specifically, each coefficient $\beta _{w,c}$ is modelled as the sum of the global fixed effect ($\beta_{c}$) for the entire region, and a ward-specific random effect $\beta^{*}_{w,c}$ which accounts for the spatial dependence between neighbouring wards. The spatial neighbourhood structure under BYM2 model can be separated into scaled structured ($u_{w,c}$ ) and unstructured ($v_{2,c}$) spatial components. The proportional contribution of these components is controlled by a mixing parameter $\phi_{c}$, and the overall variability of the spatial effect is controlled by a precision parameter $\tau_{c}$ [@moraga2023spatial].
+
+### Prior specification
+
+Since this analysis was conducted within a Bayesian framework, prior distributions of all model parameters were specified as follows:
+
+$$
+\alpha_{s(d,w)} \sim \mathcal{N}(0,\; 10^{4})
+$$
+$$
+\beta_c \sim \mathcal{N}(0,\; 10^6)
+$$
+
+$$
+\Pr\!\left(\frac{1}{\sqrt{\tau_c}} > 1\right) = 0.01
+$$
+
+$$
+\Pr\!\left(\phi_c < 0.5\right) = \tfrac{2}{3},\qquad0 \le \phi_c \le 1
+$$
+
+It is assumed that the strata specific intercept ($\alpha_{s(d,w)}$) and the global fixed effect ($\beta_{c}$) follow the weakly informative Gaussian priors. The prior specification for the scaled structured and unstructured spatial components of the BYM2 model uses the Penalised Complexity (PC) priors which were introduced as a interpretable and meaningful specification [@simpson2015penalisingmodelcomponentcomplexity]. For the precision parameter $\tau_{c}$ , the PC prior was set such that $\Pr\!\left(\frac{1}{\sqrt{\tau_c}} > 1\right) = 0.01$, implying that substantial there is only 1% prior probability of large residual variation in temperature-mortality risk across wards. For the mixing parameter $\phi_{c}$, the PC prior was set such that $\Pr\!\left(\phi_c < 0.5\right) = \tfrac{2}{3}$, reflecting a prior specification that there is a 67% probabilty of less than half of the residual variation in temperature-mortality risk across wards is spatially structured. This means that unstructured, ward-specific random noise accounts for a greater proportion of the variability. These conservative priors were adopted because BYM2 model naturally shrinks towards $\phi_{c}=0$ unless the data provide strong evidence of genuine spatial dependency [@riebler2016intuitivebayesianspatialmodel].
+
 ### Statistical analysis
+
+The associations between temperature and mortality across all wards were estimated with a single-stage approach with the SB-DLNM. The model was fitted using the R-INLA (Integrated Nested Laplace Approximation) package which provides computational efficiency in execution times than using Markov Chained Monte Carlo method from other R packages. Given the high dimensionality of the model induced by the cross-basis matrix and ward-specific spatial effects, inference was conducted using empirical Bayes strategy instead of the full Laplace approximation.
+
+The output of the SB-DLNMs were obtained by drawing 1,000 independent samples from the posterior distributions of the model parameters for each ward. These posterior samples were then used to derive the ward-specific temperature-mortality associations by aggregating the coefficients of the global fixed effect for the entire region and the ward-specific cross-basis coefficients. In order to calculate ward-specific relative risk (RR) curves for each ward,
+
+Uncertainty was quantified using posterior median and 95% credible interval (CrI) obtained from the posterior distributions. All data processing was performed in R version 4.4.2. All statistical analyses were performed in R version 4.4.2. All data visualisations were performed in R version 4.4.2. The code is available on ....
+
+testing
