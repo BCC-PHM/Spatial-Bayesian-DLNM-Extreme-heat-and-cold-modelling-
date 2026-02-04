@@ -60,8 +60,7 @@ Since this analysis was conducted within a Bayesian framework, prior distributio
 
 $$
 \alpha_{s(d,w)} \sim \mathcal{N}(0,\; 10^{4})
-$$
-$$
+$$ $$
 \beta_c \sim \mathcal{N}(0,\; 10^6)
 $$
 
@@ -79,8 +78,10 @@ It is assumed that the strata specific intercept ($\alpha_{s(d,w)}$) and the glo
 
 The associations between temperature and mortality across all wards were estimated with a single-stage approach with the SB-DLNM. The model was fitted using the R-INLA (Integrated Nested Laplace Approximation) package which provides computational efficiency in execution times than using Markov Chained Monte Carlo method from other R packages. Given the high dimensionality of the model induced by the cross-basis matrix and ward-specific spatial effects, inference was conducted using empirical Bayes strategy instead of the full Laplace approximation.
 
-The output of the SB-DLNMs were obtained by drawing 1,000 independent samples from the posterior distributions of the model parameters for each ward. These posterior samples were then used to derive the ward-specific temperature-mortality associations by aggregating the coefficients of the global fixed effect for the entire region and the ward-specific cross-basis coefficients. In order to calculate ward-specific relative risk (RR) curves for each ward,
+The output of the SB-DLNMs were obtained by drawing 1,000 independent samples from the posterior distributions of the model parameters for each ward. These posterior samples were then used to derive the ward-specific temperature-mortality associations by aggregating the coefficients of the global fixed effect for the entire region and the ward-specific cross-basis coefficients. In order to calculate ward-specific relative risk (RR) curves for each ward, grids of ward-specific temperatures were contructed using the observed minimum and maximum temperatures within each ward. These grids were then used to generate prediction cross-basis matrices for each ward. These matrices were then combined with the corresponding prediction cross-basis matrices for each ward to reconstruct the cumulative temperature–mortality association across the observed temperature range. Initially, the reference point of the temperature was selected at the 90th percentile which is around 17 to 18 °C that matches the nationwide reference under UK context.
+
+To obtain the minimum mortality temperature (MMT) and the MMT distribution, the 1,000 RR curves calculated from the previous step were re-centred by finding their minimum RR for each ward. The search for the minimum RR on each curve was constrained within the 1st and the 99th percentiles of the ward-specific temperature grid. The constraint was justified because extreme temperatures at extreme tails of the distribution are rare, excluding them can provide more stable estimates, which is in line with previous studies [@tobias2017mmtuncertainty]. Once the minimum RR values were identified, the corresponding temperatures from the temperature grids were extracted and defined as the MMT. The posterior distribution of the MMT for each ward was the obtained by identifying the MMT across all posterior samples.
+
+Once ward-specific MMTs had been identified for each posterior RR curve, excess mortality attributable to heat and cold were then calculated using the backward attributable fraction (b-AF) framework [@gasparrini2014attributablerisk]. The posterior distributions of the cumulative temperature-mortality association across lags that were centred at ward-specific MMTs were reconstructed by combing the posterior samples of the cross basis coefficients. The cumulative log-relative risks were calculated by summing lag-specific contributions over the 21 lags and transformed into b-AF for each posterior draw for each ward. These b-AF(s) were the multiplied by the daily observed deaths to derive the attributable numbers (ANs) for each posterior draw for each ward. Daily temperatures that were above the MMT(s) were counted as cold-related and above as heat-related.The cold- and heat-related excess mortality were calculated by aggregating the ANs separately for cold and heat and by year. Finally, the annual cold- and heat-related excess mortality were obtained by averaging over the study period, and standardised to per 100,00 in population using the 2022 ward level population estimates.
 
 Uncertainty was quantified using posterior median and 95% credible interval (CrI) obtained from the posterior distributions. All data processing was performed in R version 4.4.2. All statistical analyses were performed in R version 4.4.2. All data visualisations were performed in R version 4.4.2. The code is available on ....
-
-testing
