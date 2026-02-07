@@ -70,7 +70,7 @@ spatvector_path_abs <- normalizePath(
 source("R/chess_scape_function_raster2ts.R")
 #====================================================================================================
 #----------------------------------------------------------------------------------------------------
-#RCP 8.5 bias corrected member 1 
+#RCP 65 bias corrected member 1 
 #----------------------------------------------------------------------------------------------------
 start = Sys.time()
 
@@ -90,7 +90,7 @@ end = Sys.time()
 end-start
 
 #----------------------------------------------------------------------------------------------------
-#RCP 8.5 bias corrected member 4 
+#RCP 65 bias corrected member 4 
 #----------------------------------------------------------------------------------------------------
 start = Sys.time()
 
@@ -110,7 +110,7 @@ end = Sys.time()
 end-start
 
 #----------------------------------------------------------------------------------------------------
-#RCP 8.5 bias corrected member 6 
+#RCP 65 bias corrected member 6 
 #----------------------------------------------------------------------------------------------------
 start = Sys.time()
 
@@ -130,7 +130,7 @@ end = Sys.time()
 end-start
 
 #----------------------------------------------------------------------------------------------------
-#RCP 8.5 bias corrected member 15 
+#RCP 65 bias corrected member 15 
 #----------------------------------------------------------------------------------------------------
 start = Sys.time()
 
@@ -150,7 +150,7 @@ end = Sys.time()
 end-start
 
 #----------------------------------------------------------------------------------------------------
-#bind the chess scape rcp85 data
+#bind the chess scape rcp65 data
 chessscape65_daily_ward = rbind(chessscape65_01,
       chessscape65_04,
       chessscape65_06,
@@ -160,7 +160,75 @@ write_rds(chessscape65_daily_ward , "data/processed/chessscape65_daily_ward.rds"
 #====================================================================================================
 
 
+#----------------------------------------------------------------------------------------------------
+#RCP 8.5 bias corrected member 4 
+#----------------------------------------------------------------------------------------------------
+start = Sys.time()
 
+chessscape85_04 = raster_to_ts_chessscape(
+  tas_file_path = sort(list.files(path = "data/raw/chess_scape/chess85baiscorrect/04/", full.names = TRUE, pattern = ".nc")),
+  member_id = "4",
+  spatvector = bham_r,
+  spatvector_path = spatvector_path_abs,
+  id_match_file = bham_id_ward,
+  parallel = TRUE,
+  workers = 10,
+  show_progress = TRUE
+)
+
+end = Sys.time()
+
+end-start
+
+#----------------------------------------------------------------------------------------------------
+#RCP 8.5 bias corrected member 6 
+#----------------------------------------------------------------------------------------------------
+start = Sys.time()
+
+chessscape85_06 = raster_to_ts_chessscape(
+  tas_file_path = sort(list.files(path = "data/raw/chess_scape/chess85baiscorrect/06/", full.names = TRUE, pattern = ".nc")),
+  member_id = "6",
+  spatvector = bham_r,
+  spatvector_path = spatvector_path_abs,
+  id_match_file = bham_id_ward,
+  parallel = TRUE,
+  workers = 12,
+  show_progress = TRUE
+)
+
+end = Sys.time()
+
+end-start
+
+#----------------------------------------------------------------------------------------------------
+#RCP 8.5 bias corrected member 15 
+#----------------------------------------------------------------------------------------------------
+start = Sys.time()
+
+chessscape85_15 = raster_to_ts_chessscape(
+  tas_file_path = sort(list.files(path = "data/raw/chess_scape/chess85baiscorrect/15/", full.names = TRUE, pattern = ".nc")),
+  member_id = "15",
+  spatvector = bham_r,
+  spatvector_path = spatvector_path_abs,
+  id_match_file = bham_id_ward,
+  parallel = TRUE,
+  workers = 12,
+  show_progress = TRUE
+)
+
+end = Sys.time()
+
+end-start
+
+#----------------------------------------------------------------------------------------------------
+#bind the chess scape rcp85 data
+chessscape85_daily_ward = rbind(chessscape_01,
+                                chessscape_04,
+                                chessscape_06,
+                                chessscape_15)
+
+write_rds(chessscape85_daily_ward, "data/processed/chessscape85_daily_ward.rds")
+#====================================================================================================
 
 
 
