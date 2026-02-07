@@ -53,6 +53,11 @@ raster_to_ts_chessscape =function(
     
     # time vector (fallback if missing)
     raster_time =terra::time(tas_bham_crop)
+    if (is.null(raster_time)) {
+      raster_dates = as.Date(seq_len(nlyr(tas_bham_crop)) - 1, origin = "1970-01-01")
+    } else {
+      raster_dates = as.Date(raster_time)
+    }
     
     #name the column with their corresponding date
     colnames(ext_raw)[2:ncol(ext_raw)] =as.character(raster_dates)

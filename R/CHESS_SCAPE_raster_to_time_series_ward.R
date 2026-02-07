@@ -1,6 +1,15 @@
 # setwd("~/R_project/Extreme heat and cold")
 setwd("C:/Users/TMPACGAG/OneDrive - Birmingham City Council/Documents/R projects/PHM/Spatial Bayesian DNLM Extreme heat and cold")
 
+proj_db = list.files(.libPaths(), pattern = "proj\\.db$", recursive = TRUE, full.names = TRUE)[1]
+proj_dir = normalizePath(dirname(proj_db), winslash = "/")
+
+Sys.setenv(
+  PROJ_LIB  = proj_dir,
+  PROJ_DATA = proj_dir   # important for newer PROJ builds
+)
+
+
 library(terra)
 library(tidyterra)
 library(dplyr)
@@ -15,8 +24,8 @@ library(doParallel)
 #point R at the folder that contains proj.db
 
 list.files(.libPaths(), pattern = "proj\\.db$", recursive = TRUE, full.names = TRUE)
-# Sys.setenv(PROJ_LIB = "C:/Users/TMPACGAG/AppData/Local/Programs/R/R-4.4.2/library/sf/proj")
-Sys.setenv(PROJ_LIB = "C:/Users/chung/AppData/Local/R/win-library/4.4/sf/proj/proj.db")
+Sys.setenv(PROJ_LIB = "C:/Users/TMPACGAG/AppData/Local/Programs/R/R-4.4.2/library/sf/proj")
+# Sys.setenv(PROJ_LIB = "C:/Users/chung/AppData/Local/R/win-library/4.4/sf/proj/proj.db")
 Sys.getenv("PROJ_LIB")
 
 # --- Read Birmingham Ward shapefile ---
@@ -56,7 +65,7 @@ spatvector_path_abs <- normalizePath(
 #data from https://data.ceda.ac.uk/badc/deposited2021/chess-scape/data/rcp85_bias-corrected/01/daily/tas
 # tas_file = sort(list.files(path = "data/raw/chess_scape/chess85baiscorrect/01/", full.names = TRUE, pattern = ".nc"))
 
-spatvector_path_abs = normalizePath("data/external/boundaries/bham_wards_2022.gpkg", winslash = "/", mustWork = TRUE)
+# spatvector_path_abs = normalizePath("data/external/boundaries/bham_wards_2022.gpkg", winslash = "/", mustWork = TRUE)
 
 source("R/chess_scape_function_raster2ts.R")
 #====================================================================================================
@@ -65,8 +74,8 @@ source("R/chess_scape_function_raster2ts.R")
 #----------------------------------------------------------------------------------------------------
 start = Sys.time()
 
-chessscape85_01 = raster_to_ts_chessscape(
-  tas_file_path = sort(list.files(path = "data/raw/chess_scape/chess85baiscorrect/01/", full.names = TRUE, pattern = ".nc")),
+chessscape65_01 = raster_to_ts_chessscape(
+  tas_file_path = sort(list.files(path = "data/raw/chess_scape/chess45biascorrect/01/", full.names = TRUE, pattern = ".nc")),
   member_id = "1",
   spatvector = bham_r,
   spatvector_path = spatvector_path_abs,
@@ -85,13 +94,13 @@ end-start
 #----------------------------------------------------------------------------------------------------
 start = Sys.time()
 
-chessscape85_04 = raster_to_ts_chessscape(
-  tas_file_path = sort(list.files(path = "data/raw/chess_scape/chess85baiscorrect/04/", full.names = TRUE, pattern = ".nc")),
+chessscape65_04 = raster_to_ts_chessscape(
+  tas_file_path = sort(list.files(path = "data/raw/chess_scape/chess45biascorrect/04/", full.names = TRUE, pattern = ".nc")),
   member_id = "4",
   spatvector = bham_r,
   spatvector_path = spatvector_path_abs,
   id_match_file = bham_id_ward,
-  parallel = TRUE,
+  parallel = FALSE,
   workers = 10,
   show_progress = TRUE
 )
@@ -105,8 +114,8 @@ end-start
 #----------------------------------------------------------------------------------------------------
 start = Sys.time()
 
-chessscape85_06 = raster_to_ts_chessscape(
-  tas_file_path = sort(list.files(path = "data/raw/chess_scape/chess85baiscorrect/06/", full.names = TRUE, pattern = ".nc")),
+chessscape65_06 = raster_to_ts_chessscape(
+  tas_file_path = sort(list.files(path = "data/raw/chess_scape/chess45biascorrect/06/", full.names = TRUE, pattern = ".nc")),
   member_id = "6",
   spatvector = bham_r,
   spatvector_path = spatvector_path_abs,
@@ -125,8 +134,8 @@ end-start
 #----------------------------------------------------------------------------------------------------
 start = Sys.time()
 
-chessscape85_15 = raster_to_ts_chessscape(
-  tas_file_path = sort(list.files(path = "data/raw/chess_scape/chess85baiscorrect/15/", full.names = TRUE, pattern = ".nc")),
+chessscape65_15 = raster_to_ts_chessscape(
+  tas_file_path = sort(list.files(path = "data/raw/chess_scape/chess45biascorrect/15/", full.names = TRUE, pattern = ".nc")),
   member_id = "15",
   spatvector = bham_r,
   spatvector_path = spatvector_path_abs,
@@ -142,12 +151,12 @@ end-start
 
 #----------------------------------------------------------------------------------------------------
 #bind the chess scape rcp85 data
-chessscape85_daily_ward = rbind(chessscape_01,
-      chessscape_04,
-      chessscape_06,
-      chessscape_15)
+chessscape65_daily_ward = rbind(chessscape65_01,
+      chessscape65_04,
+      chessscape65_06,
+      chessscape65_15)
 
-write_rds(chessscape85_daily_ward, "data/processed/chessscape85_daily_ward.rds")
+write_rds(chessscape65_daily_ward , "data/processed/chessscape65_daily_ward.rds")
 #====================================================================================================
 
 
