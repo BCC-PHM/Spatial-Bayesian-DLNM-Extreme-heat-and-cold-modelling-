@@ -342,6 +342,100 @@ write_rds(cold_annual_post,"output/cold_annual_post_EM_ward.rds")
 write_rds(ward_EM_summary, "output/heat_and_cold_related_EM_ward.rds")
 
 ##########################################################################
+#Extreme heat and cold 
+##########################################################################
+excess_mortality_daily_by_ward = readRDS("output/excess_mortality_daily_by_ward.rds")
+
+X_heat_annual_post = vector("list", 69)
+X_cold_annual_post = vector("list", 69)
+# summary table
+ward_X_EM_summary = data.frame(
+  Ward_id   = integer(69),
+  Ward_code = character(69),
+  heat_med  = numeric(69),
+  heat_LL   = numeric(69),
+  heat_UL   = numeric(69),
+  cold_med  = numeric(69),
+  cold_LL   = numeric(69),
+  cold_UL   = numeric(69)
+)
+nsim = 1000  # set once
+for (i in 1:69) {
+  # --------------------------------------------------
+  # Ward-specific data
+  # --------------------------------------------------
+  df_w = df_complete[df_complete$new_id == i, ]
+  obs_deaths = df_w$deaths
+  at = df_w %>%
+    dplyr::select(tasmean, dplyr::contains("lag")) %>%
+    dplyr::rename(lag0 = tasmean)
+  ok = seq_len(nrow(at)) > 21 & !is.na(obs_deaths)
+  testing = data.frame(
+    Date         = as.Date(df_w$date[ok]),
+    year         = lubridate::year(as.Date(df_w$date[ok])),
+    daily_tasmean= df_w$tasmean[ok],
+    Ward_code    = unique(df_w$ward22cd)
+  )
+  n_years = length(unique(testing$year))
+  # --------------------------------------------------
+  # Extreme temperature classification (ward-specific, NOT draw-specific)
+  # --------------------------------------------------
+  T = testing$daily_tasmean
+  q_hi = as.numeric(stats::quantile(T, 0.975, na.rm = TRUE))
+  q_lo = as.numeric(stats::quantile(T, 0.025, na.rm = TRUE))
+  is_heat = T >= q_hi
+  is_cold = T <= q_lo
+  # Optional: if you want to ensure extremes exist
+  # stopifnot(any(is_heat), any(is_cold))
+  # --------------------------------------------------
+  # Daily excess mortality (already computed)
+  # --------------------------------------------------
+  EM_for_ward_i = excess_mortality_daily_by_ward[[i]]
+  # Safety check: rows must align with testing days
+  if (nrow(EM_for_ward_i) != nrow(testing)) {
+    stop(sprintf(
+      "Row mismatch in ward %d: EM has %d rows, testing has %d rows",
+      i, nrow(EM_for_ward_i), nrow(testing)
+    ))
+  }
+  # Safety check: columns (draws)
+  if (ncol(EM_for_ward_i) < nsim) {
+    stop(sprintf(
+      "Draw mismatch in ward %d: EM has %d draws/cols but nsim=%d",
+      i, ncol(EM_for_ward_i), nsim
+    ))
+  }
+  heat_annual_i = numeric(nsim)
+  cold_annual_i = numeric(nsim)
+  for (j in 1:nsim) {
+    AN_j = EM_for_ward_i[, j]
+    heat_total_j = sum(AN_j[is_heat], na.rm = TRUE)
+    cold_total_j = sum(AN_j[is_cold], na.rm = TRUE)
+    heat_annual_i[j] = heat_total_j / n_years
+    cold_annual_i[j] = cold_total_j / n_years
+  }
+  # --------------------------------------------------
+  # Store posterior distributions
+  # --------------------------------------------------
+  X_heat_annual_post[[i]] = heat_annual_i
+  X_cold_annual_post[[i]] = cold_annual_i
+  # --------------------------------------------------
+  # Store summary statistics (median + 95% CrI)
+  # --------------------------------------------------
+  ward_X_EM_summary$Ward_id[i]   = i
+  ward_X_EM_summary$Ward_code[i] = unique(testing$Ward_code)
+  ward_X_EM_summary$heat_med[i] = stats::median(heat_annual_i, na.rm = TRUE)
+  ward_X_EM_summary$heat_LL[i]  = stats::quantile(heat_annual_i, 0.025, na.rm = TRUE)
+  ward_X_EM_summary$heat_UL[i]  = stats::quantile(heat_annual_i, 0.975, na.rm = TRUE)
+  ward_X_EM_summary$cold_med[i] = stats::median(cold_annual_i, na.rm = TRUE)
+  ward_X_EM_summary$cold_LL[i]  = stats::quantile(cold_annual_i, 0.025, na.rm = TRUE)
+  ward_X_EM_summary$cold_UL[i]  = stats::quantile(cold_annual_i, 0.975, na.rm = TRUE)
+}
+write_rds(X_heat_annual_post,"output/X_heat_annual_post_EM_ward.rds")
+write_rds(X_cold_annual_post,"output/X_cold_annual_post_EM_ward.rds")
+write_rds(ward_X_EM_summary, "output/X_heat_and_cold_related_EM_ward.rds")
+
+
 #====================================================================
 #calculate per 100,000 rate
 #--------------------------------------------------------------------
@@ -457,22 +551,112 @@ tmap_save(merged_cold_heat_em, filename ="figs/merged_cold_heat_em.png",height =
 
 ##############################################################################################################
 #calculate extreme heat and cold
-#only use to >=95% temp for extreme heat
-#only use <=5 % temp for extreme cold
+#only use to >=97.5% temp for extreme heat
+#only use <=2.5 % temp for extreme cold
+
+
+
+
+ward_pop = ward_pop %>% 
+  filter(`LAD 2022 Name` == "Birmingham") %>% 
+  pivot_longer(cols = c(-`LAD 2022 Name`,-`LAD 2022 Name`,-`Ward 2022 Code`,-`Ward 2022 Name`,-Total,
+                        -`LAD 2022 Code`),
+               names_to = "age",
+               values_to = "count") %>% 
+  group_by(`Ward 2022 Code`,`Ward 2022 Name`) %>% 
+  summarise(count = sum(count)) %>% 
+  rename(Ward_code = `Ward 2022 Code`,
+         Ward_name = `Ward 2022 Name`) %>% 
+  left_join(ward_X_EM_summary, by ="Ward_code") %>%  #join em summary with pop estimate
+  group_by(Ward_code, Ward_name, Ward_id) %>% 
+  #standardisation
+  mutate(heat_med = heat_med/count*100000,
+         heat_LL = heat_LL/count*100000,
+         heat_UL = heat_UL/count*100000,
+         cold_med = cold_med/count*100000,
+         cold_LL = cold_LL/count*100000,
+         cold_UL = cold_UL/count*100000
+  )
+
+
+
+
+tmap_mode(mode = "plot")
+
+Xcold_related_em = tm_shape(ward_map %>% 
+                             left_join(ward_pop, by = c("Ward_Code"="Ward_code")))+
+  tm_polygons(
+    fill= "cold_med",
+    fill.scale = tm_scale_continuous(values = "blues"),
+    fill.legend = tm_legend("per 100,000", group_id = "top", frame = FALSE,bg.alpha=0)
+  )+
+  tm_layout(
+    legend.position = c(0.02, 0.92),
+    frame = FALSE,
+    inner.margins = c(0.07, 0, 0.15, 0), # Increased bottom margin (3rd number) to make room for caption
+    component.autoscale = TRUE
+  ) +
+  tm_title("Posterior Median Estimates of Annual Excess Mortality due to Extreme Cold")+
+  tm_credits(
+    text = "Posterior median annual excess deaths on extreme-cold days, defined as days with ward-specific daily mean \ntemperature at or below the 2.5th percentile",
+    position = c("LEFT","TOP")    # = make this bigger (try 0.9–1.1)
+
+    )+
+  tm_compass(type = "8star",
+             size = 3,
+             position = c("RIGHT", "bottom"),
+             color.light = "white")+
+  tm_credits(
+    text = paste("Contains OS data \u00A9 Crown copyright and database right",
+                 # Get current year
+                 format(Sys.Date(), "%Y"),
+                 ". Source:\nOffice for National Statistics licensed under the Open Government Licence v.3.0."),
+    position = c("LEFT", "BOTTOM")
+  )
+
+
+tmap_save(Xcold_related_em ,filename = "figs/Xcold_related_em.png", height = 7,width =6, unit="in",dpi = 600 )
 
 
 
 
 
+Xheat_related_em = tm_shape(ward_map %>% 
+                             left_join(ward_pop, by = c("Ward_Code"="Ward_code")))+
+  tm_polygons(
+    fill= "heat_med",
+    fill.scale = tm_scale_continuous(values = "reds"),
+    fill.legend = tm_legend("per 100,000", group_id = "top", frame = FALSE,bg.alpha=0)
+  )+
+  tm_layout(
+    legend.position = c(0.02, 0.92),
+    frame = FALSE,
+    inner.margins = c(0.07, 0, 0.15, 0) # Increased bottom margin (3rd number) to make room for caption
+  ) +
+  tm_title("Posterior Median Estimates of Annual Excess Mortality due to Extreme Heat")+
+  tm_credits(text = "Posterior median annual excess deaths on extreme-cold days, defined as days with ward-specific daily mean \ntemperature at or above the 97.5th percentile", 
+             position = c("LEFT","TOP"))+
+  tm_compass(type = "8star",
+             size = 4,
+             position = c("RIGHT", "bottom"),
+             color.light = "white")+
+  tm_credits(
+    text = paste("Contains OS data \u00A9 Crown copyright and database right",
+                 # Get current year
+                 format(Sys.Date(), "%Y"),
+                 ". Source:\nOffice for National Statistics licensed under the Open Government Licence v.3.0."),
+    position = c("LEFT", "BOTTOM")
+  )
 
 
+tmap_save(Xcold_related_em ,filename = "figs/Xcold_related_em.png", height = 7,width =6, unit="in",dpi = 600 )
+
+tmap_save(Xheat_related_em,filename = "figs/Xheat_related_em.png", height = 7,width =6, unit="in",dpi = 600 )
 
 
-
-
-
-
-
+#merge the plots
+merged_Xcold_Xheat_em = tmap_arrange(Xcold_related_em,Xheat_related_em )
+tmap_save(merged_Xcold_Xheat_em, filename ="figs/merged_Xcold_Xheat_em.png",height = 7,width =12, unit="in",dpi = 600)
 
 
 
