@@ -10,7 +10,10 @@ RCP26 = read_csv("output/RCP26_heat_cold_final.csv")
 RCP45 = read_csv("output/RCP45_heat_cold_final.csv")
 RCP60 = read_csv("output/RCP60_heat_cold_final.csv")
 RCP85 = read_csv("output/RCP85_heat_cold_final.csv")
-
+BRCP26 = read.csv("output/Baseline_RCP26_heat_cold_final.csv")
+BRCP45 = read.csv("output/Baseline_RCP45_heat_cold_final.csv")
+BRCP60 = read.csv("output/Baseline_RCP60_heat_cold_final.csv")
+BRCP85 = read.csv("output/Baseline_RCP85_heat_cold_final.csv")
 
 ward_pop = read_excel("data/external/population/sapewardstablefinal.xlsx", 
                       sheet = "Mid-2022 Ward 2022", skip = 3)
@@ -19,7 +22,11 @@ ward_pop = read_excel("data/external/population/sapewardstablefinal.xlsx",
 ward_map = read_sf("data/external/boundaries/boundaries-wards-2022-birmingham/boundaries-wards-2022-birmingham.shp")
 
 
-all_combined = rbind(RCP26,RCP45,RCP60,RCP85)
+all_combined = rbind(RCP26[,-1],BRCP26[,-1],
+                     RCP45[,-1],BRCP45[,-1],
+                     RCP60[,-1],BRCP60[,-1],
+                     RCP85[,-1],BRCP85[,-1]
+)
 all_combined = ward_pop %>% 
   filter(`LAD 2022 Name` == "Birmingham") %>% 
   pivot_longer(cols = c(-`LAD 2022 Name`,-`LAD 2022 Name`,-`Ward 2022 Code`,-`Ward 2022 Name`,-Total,
@@ -45,11 +52,12 @@ all_combined = ward_pop %>%
          cold_med = cold_med/count*100000,
          cold_LL = cold_LL/count*100000,
          cold_UL = cold_UL/count*100000,
-         Decade = paste0(Decade,"s")
+         Decade = ifelse(Decade != "Baseline",paste0(Decade,"s"), Decade)
   ) %>% 
   ungroup()
-  
-  
+
+
+
 
 #-------------------------------------------------------------
 #baseline heat and cold from observed deaths
@@ -57,54 +65,12 @@ all_combined = ward_pop %>%
 ward_EM_summary = read_rds("output/heat_and_cold_related_EM_ward.rds")
 
 
-obs = ward_pop %>% 
-  filter(`LAD 2022 Name` == "Birmingham") %>% 
-  pivot_longer(cols = c(-`LAD 2022 Name`,-`LAD 2022 Name`,-`Ward 2022 Code`,-`Ward 2022 Name`,-Total,
-                        -`LAD 2022 Code`),
-               names_to = "age",
-               values_to = "count") %>% 
-  group_by(`Ward 2022 Code`,`Ward 2022 Name`) %>% 
-  summarise(count = sum(count)) %>% 
-  rename(Ward_code = `Ward 2022 Code`,
-         Ward_name = `Ward 2022 Name`) %>% 
-  left_join(ward_EM_summary, by ="Ward_code") %>%  #join em summary with pop estimate
-  group_by(Ward_code, Ward_name, Ward_id) %>% 
-  #standardisation
-  mutate(heat_med = heat_med/count*100000,
-         heat_LL = heat_LL/count*100000,
-         heat_UL = heat_UL/count*100000,
-         cold_med = cold_med/count*100000,
-         cold_LL = cold_LL/count*100000,
-         cold_UL = cold_UL/count*100000,
-         Decade = "baseline"
-  ) %>% 
-  ungroup()
-
-
-#grid to duplicate baseline for each scenario 
-scenario_grid = expand.grid(emission = c("RCP2.6", "RCP4.5", "RCP6.0", "RCP8.5"),
-            Ward_id = 1:69)
-
-
-obs = obs %>% 
-  left_join(scenario_grid, by = "Ward_id", relationship = "many-to-many") %>% 
-  mutate(Decade = "Baseline")
-
-#separate cold
-obs_cold =obs %>% 
-  select(Decade, Ward_code,Ward_name,cold_med,emission)
-  
-
-#separate heat
-obs_heat =obs %>% 
-  select(Decade, Ward_code,Ward_name,heat_med,emission)
 
 #-------------------------------------------------------------
 #cold
 
 all_combined_cold = all_combined %>% 
   select(Decade, Ward_code,Ward_name,cold_med,emission) %>% 
-  rbind(obs_cold) %>% 
   mutate(
     Decade = factor(Decade, levels= c("Baseline", "2030s", "2040s", "2050s", "2060s","2070s")),
     emission = factor(emission, levels = c("RCP2.6", "RCP4.5", "RCP6.0", "RCP8.5"))
@@ -118,7 +84,6 @@ all_combined_cold = ward_map %>%
 
 all_combined_heat= all_combined %>% 
   select(Decade, Ward_code,Ward_name,heat_med,emission)%>% 
-  rbind(obs_heat) %>% 
   mutate(
     Decade = factor(Decade, levels= c("Baseline", "2030s", "2040s", "2050s", "2060s","2070s")),
     emission = factor(emission, levels = c("RCP2.6", "RCP4.5", "RCP6.0", "RCP8.5"))
@@ -127,6 +92,7 @@ all_combined_heat= all_combined %>%
 all_combined_heat = ward_map %>% 
   left_join(all_combined_heat, by = c("Ward_Code"="Ward_code")) 
 
+#-------------------------------------------------------------
 #-------------------------------------------------------------
 tmap_mode("plot")
 
@@ -144,8 +110,8 @@ proj_cold = tm_shape(all_combined_cold)+
     panel.label.bg.alpha = 0.85,
     
     # legend text
-    legend.title.size = 1.2,
-    legend.text.size  = 1.05,
+    legend.title.size = 1,
+    legend.text.size  = 0.8,
     
     # overall font scaling (applies broadly)
     fontfamily = "sans",
@@ -163,6 +129,7 @@ tmap_save(
   dpi = 600
 )
 
+
 proj_heat = tm_shape(all_combined_heat)+
   tm_polygons(
     fill= "heat_med",
@@ -178,8 +145,8 @@ proj_heat = tm_shape(all_combined_heat)+
     panel.label.bg.alpha = 0.85,
     
     # legend text
-    legend.title.size = 1.2,
-    legend.text.size  = 1.05,
+    legend.title.size = 1,
+    legend.text.size  = 0.8,
     
     # overall font scaling (applies broadly)
     fontfamily = "sans",
@@ -196,3 +163,9 @@ tmap_save(
   width = 12, height = 7, units = "in",
   dpi = 600
 )
+
+
+################################################################################
+
+
+
