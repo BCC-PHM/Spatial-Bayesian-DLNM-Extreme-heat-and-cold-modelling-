@@ -167,5 +167,86 @@ tmap_save(
 
 ################################################################################
 
+RCP26AF = read_csv("output/AF_RCP26_heat_cold_final.csv")
+RCP45AF = read_csv("output/AF_RCP45_heat_cold_final.csv")
+RCP60AF = read_csv("output/AF_RCP60_heat_cold_final.csv")
+RCP85AF = read_csv("output/AF_RCP85_heat_cold_final.csv")
+BRCP26AF = read.csv("output/Baseline_AF_RCP26_heat_cold_final.csv")
+BRCP45AF = read.csv("output/Baseline_AF_RCP45_heat_cold_final.csv")
+BRCP60AF = read.csv("output/Baseline_AF_RCP60_heat_cold_final.csv")
+BRCP85AF = read.csv("output/Baseline_AF_RCP85_heat_cold_final.csv")
+
+
+
+
+
+
+all_combined_AF = rbind(RCP26AF[,-1],BRCP26AF[,-1],
+                     RCP45AF[,-1],BRCP45AF[,-1],
+                     RCP60AF[,-1],BRCP60AF[,-1],
+                     RCP85AF[,-1],BRCP85AF[,-1])%>% 
+  mutate(
+    Decade = ifelse(Decade != "Baseline",paste0(Decade,"s"), Decade),
+    Decade = factor(Decade, levels= c("Baseline", "2030s", "2040s", "2050s", "2060s","2070s")),
+    emission = factor(emission, levels = c("RCP2.6", "RCP4.5", "RCP6.0", "RCP8.5"))
+    )
+  
+
+
+
+
+all_combined_AF = all_combined_AF %>%
+  mutate(Ward_Name = coalesce(Ward_Name.x, Ward_Name.y)) %>% 
+  select(-Ward_Name.x, -Ward_Name.y) %>%
+  rename_with(~ gsub("coldAF_", "cold_", .x)) %>%
+  rename_with(~ gsub("heatAF_", "heat_", .x)) %>%
+  pivot_longer(
+    cols = c(cold_med, cold_LL, cold_UL, heat_med, heat_LL, heat_UL),
+    names_to = c("type", "stat"),
+    names_sep = "_",
+    values_to = "AF"
+  ) %>%
+  pivot_wider(names_from = stat, values_from = AF, names_prefix = "AF_")
+  
+  
+lvl <- c("Baseline","2030s","2040s","2050s","2060s","2070s")
+
+plot_df <- all_combined_AF %>%
+  filter(ID == 69, emission == "RCP4.5") %>%
+  mutate(
+    Decade = factor(Decade, levels = lvl),
+    x_dec  = as.numeric(Decade)   # 1..6 (Baseline=1, 2030s=2, ...)
+  )
+
+
+
+
+
+ggplot(plot_df, aes(x = x_dec, y = AF_med, group = type)) +
+  geom_ribbon(aes(ymin = AF_LL, ymax = AF_UL, fill = type),
+              alpha = 0.2, colour = NA) +
+  geom_line(aes(colour = type), linewidth = 1) +
+  geom_point(aes(colour = type), size = 2) +
+  scale_x_continuous(breaks = seq_along(lvl), labels = lvl) +
+  labs(x = "Decade", y = "AF", colour = NULL, fill = NULL)+
+  coord_cartesian(ylim = c(0, 20)) 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
