@@ -189,48 +189,175 @@ all_combined_AF = rbind(RCP26AF[,-1],BRCP26AF[,-1],
     Decade = ifelse(Decade != "Baseline",paste0(Decade,"s"), Decade),
     Decade = factor(Decade, levels= c("Baseline", "2030s", "2040s", "2050s", "2060s","2070s")),
     emission = factor(emission, levels = c("RCP2.6", "RCP4.5", "RCP6.0", "RCP8.5"))
-    )
+    ) %>% 
+    mutate(Ward_Name = coalesce(Ward_Name.x, Ward_Name.y)) %>%
+    select(-Ward_Name.x, -Ward_Name.y)
+
   
+all_combined_cold = all_combined_AF %>% 
+  select(Decade, Ward_Code,Ward_Name,coldAF_med,emission) 
+
+
+all_combined_cold = ward_map %>% 
+  left_join(all_combined_cold, by = c("Ward_Code"="Ward_Code"))
+
+
+str(all_combined_cold$coldAF_med)
+
+
+all_combined_heat = all_combined_AF %>% 
+  select(Decade, Ward_Code,Ward_Name,heatAF_med,emission) 
+
+
+all_combined_heat = ward_map %>% 
+  left_join(all_combined_heat, by = c("Ward_Code"="Ward_Code"))
+
+
+
+tmap_mode("plot")
+
+proj_cold = tm_shape(all_combined_cold)+
+  tm_polygons(
+    fill= "coldAF_med",
+    fill.scale = tm_scale_continuous(values = "blues"),
+    fill.legend = tm_legend("Excess mortality (%)", group_id = "bottom", frame = TRUE,bg.alpha=0)
+  )+
+  tm_facets_grid(rows = "emission", columns = "Decade")+
+  tm_layout(
+    # facet strip labels (row/column labels)
+    panel.label.size = 1.4,
+    panel.label.bg.color = "white",
+    panel.label.bg.alpha = 0.85,
+    
+    # legend text
+    legend.title.size = 1,
+    legend.text.size  = 0.8,
+    
+    # overall font scaling (applies broadly)
+    fontfamily = "sans",
+    
+    legend.outside = TRUE,
+    legend.outside.position = "bottom",
+    frame = FALSE
+  )+
+  tm_title("Posterior Median Projections of Annual Cold-Related Excess Mortality (%) by Scenario and Decade") 
+
+tmap_save(
+  proj_cold,
+  filename = "figs/cold_projection_posterior_median_AF.png",
+  width = 12, height = 7, units = "in",
+  dpi = 600
+)
 
 
 
 
-all_combined_AF = all_combined_AF %>%
-  mutate(Ward_Name = coalesce(Ward_Name.x, Ward_Name.y)) %>% 
-  select(-Ward_Name.x, -Ward_Name.y) %>%
-  rename_with(~ gsub("coldAF_", "cold_", .x)) %>%
-  rename_with(~ gsub("heatAF_", "heat_", .x)) %>%
-  pivot_longer(
-    cols = c(cold_med, cold_LL, cold_UL, heat_med, heat_LL, heat_UL),
-    names_to = c("type", "stat"),
-    names_sep = "_",
-    values_to = "AF"
-  ) %>%
-  pivot_wider(names_from = stat, values_from = AF, names_prefix = "AF_")
-  
-  
-lvl <- c("Baseline","2030s","2040s","2050s","2060s","2070s")
-
-plot_df <- all_combined_AF %>%
-  filter(ID == 69, emission == "RCP4.5") %>%
-  mutate(
-    Decade = factor(Decade, levels = lvl),
-    x_dec  = as.numeric(Decade)   # 1..6 (Baseline=1, 2030s=2, ...)
-  )
 
 
 
 
 
-ggplot(plot_df, aes(x = x_dec, y = AF_med, group = type)) +
-  geom_ribbon(aes(ymin = AF_LL, ymax = AF_UL, fill = type),
-              alpha = 0.2, colour = NA) +
-  geom_line(aes(colour = type), linewidth = 1) +
-  geom_point(aes(colour = type), size = 2) +
-  scale_x_continuous(breaks = seq_along(lvl), labels = lvl) +
-  labs(x = "Decade", y = "AF", colour = NULL, fill = NULL)+
-  coord_cartesian(ylim = c(0, 20)) 
 
+
+proj_heat = tm_shape(all_combined_heat)+
+  tm_polygons(
+    fill= "heatAF_med",
+    fill.scale = tm_scale_continuous(values = "reds"),
+    fill.legend = tm_legend("Excess mortality (%)", group_id = "top", frame = FALSE,bg.alpha=0)
+  )+
+  tm_facets_grid(rows = "emission", columns = "Decade")+
+  tm_facets_grid(rows = "emission", columns = "Decade")+
+  tm_layout(
+    # facet strip labels (row/column labels)
+    panel.label.size = 1.4,
+    panel.label.bg.color = "white",
+    panel.label.bg.alpha = 0.85,
+    
+    # legend text
+    legend.title.size = 1,
+    legend.text.size  = 0.8,
+    
+    # overall font scaling (applies broadly)
+    fontfamily = "sans",
+    
+    legend.outside = TRUE,
+    legend.outside.position = "bottom",
+    frame = FALSE
+  )+
+  tm_title("Posterior Median Projections of Annual Heat-Related Excess Mortality (%) by Scenario and Decade") 
+
+tmap_save(
+  proj_heat,
+  filename = "figs/heat_projection_posterior_median_AF.png",
+  width = 12, height = 7, units = "in",
+  dpi = 600
+)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# 
+# 
+# all_combined_AF = all_combined_AF %>%
+#   mutate(Ward_Name = coalesce(Ward_Name.x, Ward_Name.y)) %>% 
+#   select(-Ward_Name.x, -Ward_Name.y) %>%
+#   rename_with(~ gsub("coldAF_", "cold_", .x)) %>%
+#   rename_with(~ gsub("heatAF_", "heat_", .x)) %>%
+#   pivot_longer(
+#     cols = c(cold_med, cold_LL, cold_UL, heat_med, heat_LL, heat_UL),
+#     names_to = c("type", "stat"),
+#     names_sep = "_",
+#     values_to = "AF"
+#   ) %>%
+#   pivot_wider(names_from = stat, values_from = AF, names_prefix = "AF_")
+#   
+#   
+# lvl <- c("Baseline","2030s","2040s","2050s","2060s","2070s")
+# 
+# plot_df <- all_combined_AF %>%
+#   filter(ID == 69, emission == "RCP4.5") %>%
+#   mutate(
+#     Decade = factor(Decade, levels = lvl),
+#     x_dec  = as.numeric(Decade)   # 1..6 (Baseline=1, 2030s=2, ...)
+#   )
+# 
+# 
+# 
+# 
+# 
+# ggplot(plot_df, aes(x = x_dec, y = AF_med, group = type)) +
+#   geom_ribbon(aes(ymin = AF_LL, ymax = AF_UL, fill = type),
+#               alpha = 0.2, colour = NA) +
+#   geom_line(aes(colour = type), linewidth = 1) +
+#   geom_point(aes(colour = type), size = 2) +
+#   scale_x_continuous(breaks = seq_along(lvl), labels = lvl) +
+#   labs(x = "Decade", y = "AF", colour = NULL, fill = NULL)+
+#   coord_cartesian(ylim = c(0, 20)) 
+# 
 
 
 

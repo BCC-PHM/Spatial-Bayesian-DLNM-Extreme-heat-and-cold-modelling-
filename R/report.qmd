@@ -8,8 +8,6 @@ execute:
   echo: false
   message: false
   warning: false
-  fig-width: 10
-  fig-height: 8
 format: 
   html:
     embed-resources: true
@@ -17,6 +15,19 @@ format:
     toc-location: left
     number-sections: true
 ---
+
+```{r libraries/setup}
+#| output: false
+#| warning: false
+library(tidyverse)
+library(ggiraph)
+library(patchwork)
+library(sf)
+library(readr)
+library(readxl)
+library(here)
+
+```
 
 ## Introduction
 
@@ -90,12 +101,331 @@ For projections, 1,000 posterior distribution of the coefficients of the ward-sp
 
 Uncertainty was quantified using posterior median and 95% credible interval (CrI) obtained from the posterior distributions. All data processing was performed in R version 4.4.2. All statistical analyses were performed in R version 4.4.2. All data visualisations were performed in R version 4.4.2. The code is available on ....
 
-### Results
+## Results
+
+```{r data for figure 2}
+#| output: false
+#| warning: false
+real_plot_df = readRDS(here("output", "RR_MMT_plot_data.rds"))
+ward_map = read_sf(here(
+    "data", "external", "boundaries",
+    "boundaries-wards-2022-birmingham",
+    "boundaries-wards-2022-birmingham.shp"
+  ))
+
+#############################################################################
+RR_99th_map = real_plot_df %>% 
+  filter(Percentage == "99.0%") %>% 
+  mutate(tooltip = paste0("<B>Ward Name:</B> ", Ward_name, "\n",
+                          "<B>Ward Code:</B> ", Ward_code, "\n",
+                          "<B>Median RR:</B> ", round(RR_median,2), "\n",
+                          "<B>Upper95CrI:</B> ", round(RR_UL,2), "\n",
+                          "<B>Lower95CrI:</B> ", round(RR_LL,2)))
+#############################################################################
+
+RR_1st_map = real_plot_df %>% 
+  filter(Percentage == "1.0%") %>% 
+  mutate(tooltip = paste0("<B>Ward Name:</B> ", Ward_name, "\n",
+                          "<B>Ward Code:</B> ", Ward_code, "\n",
+                          "<B>Median RR:</B> ", round(RR_median,2), "\n",
+                          "<B>Upper95CrI:</B> ", round(RR_UL,2), "\n",
+                          "<B>Lower95CrI:</B> ", round(RR_LL,2)))
+
+
+
+#custom css
+tooltip_css = "
+  background: rgba(255, 255, 255, 0.97);
+  color: #1f2937;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(17, 24, 39, 0.12);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
+  font-size: 16px;
+  line-height: 1.35;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+"
+
+hover_css = "
+  cursor: pointer;
+  stroke: #111827 ;    /* darker border */
+  stroke-width: 1.5px ;  /* thicker border */
+  opacity: 1 ;         /* keep fill the same */
+  transition: all 0.15s ease-out;
+"
+
+```
 
 Figure 1 shows the overall ward-specific cumulative relative risk curves for an adjacent set of neighbouring wards in Birmingham. It is observed that these RR curves show the usual J-shape with varying MMT but generally occur at a relatively warmer temperatures at around the 90th percentile temperatures. Elevated mortality risks in both cold and heat temperatures are observed across wards.
 
-![Figure 1: Ward-specific temperature–mortality exposure–response functions for an adjacent set of neighbouring wards in Birmingham, showing minimum mortality temperature (MMT), relative risks at the 1st (●) and 99th (▲) percentile temperatures, and 95% credible intervals (shaded ribbon)](images/Billesley_RR_and_neighour_page-0001.jpg)
+![Ward-specific temperature–mortality exposure–response functions for an adjacent set of neighbouring wards in Birmingham, showing minimum mortality temperature (MMT), relative risks at the 1st (●) and 99th (▲) percentile temperatures, and 95% credible intervals (shaded ribbon).](images/Billesley_RR_and_neighour_page-0001.jpg){#fig-rrcurves fig-align="center"}
 
 Figure 2 shows the spatial distribution of the median RR at 1st and 99th percentile of the ward specific temperatures referenced to their own MMT. Billesley exhibits the highest RR at 1st percentile temperature at 2.58 (95% CrI: 1.47-4.61). In contrast, the RR values at 99th percentile are also elevated where ward Glebe Farm & Tile Cross shows the highest RR at 1.83 (95% CrI: 0.99–3.24). The cold-and heat- extreme map shows consistent elevated RR across wards, with similar RR values between adjacent neighbours, implying spatial clustering and vulnerability to lower and higher temperatures is not uniform across Birmingham.
 
-![Ward-level spatial patterns in cumulative temperature–mortality relative risk at the 1st and 99th percentile temperatures (MMT-referenced).](images/merged_1st_99th_RR_plot.png){fig-align="center"}
+::: {#fig-rr-maps}
+```{r figure 2}
+
+figure1 = ggplot(ward_map %>% left_join(RR_99th_map, by = c("Ward_Code" = "Ward_code" )))+
+  geom_sf_interactive(color = "white", aes(fill = RR_median, tooltip = tooltip,data_id = Ward_Code))+
+  scale_fill_distiller(palette = "Reds", direction = 1)+
+  labs(fill = "Relative Risk")+
+  ggtitle("Median Relative Risk of death at the 99th percentile of \nthe ward temperature distribution compared to the risk \nat the MMT of the median exposure response curve.")+
+  theme_void(base_size = 16) +
+  theme()
+
+
+figure2 = ggplot(ward_map %>% left_join(RR_1st_map, by = c("Ward_Code" = "Ward_code" )))+
+  geom_sf_interactive(color = "white", aes(fill = RR_median, tooltip = tooltip,data_id = Ward_Code))+
+  scale_fill_distiller(palette = "Blues", direction = 1)+
+  labs(fill = "Relative Risk")+
+  ggtitle("Median Relative Risk of death at the 1st percentile of \nthe ward temperature distribution compared to the risk \nat the MMT of the median exposure response curve.")+
+  theme_void(base_size = 16) +
+  theme()
+
+
+
+figure1_2 = figure2 +figure1
+
+#| label: fig-rr-maps
+#| fig-cap: "Ward-level spatial patterns in cumulative temperature–mortality relative risk at the 1st and 99th percentile temperatures (MMT-referenced)."
+#| fig-align: center
+#| fig-show: hold
+
+
+g = ggiraph::girafe(
+  ggobj = figure1_2,
+  width_svg = 14,
+  height_svg = 10,
+  options = list(
+    opts_hover(css = hover_css),
+    opts_tooltip(css = tooltip_css),
+    opts_hover_inv(css = "")))
+g
+
+```
+
+Ward-level spatial patterns in cumulative temperature–mortality relative risk at the 1st and 99th percentile temperatures (MMT-referenced).
+:::
+
+Figure 3 shows the posterior median annual cold and heat-related excess mortality per 100,000 population. It shows similar pattern where areas with higher excess mortality also have higher RR being reported in figure 2.
+
+```{r data for figure 3}
+#| output: false
+#| warning: false
+ward_EM_summary = read_rds(here("output", "heat_and_cold_related_EM_ward.rds"))
+
+
+
+ward_pop = read_excel(here("data", "external", "population", "sapewardstablefinal.xlsx"),
+  sheet = "Mid-2022 Ward 2022",
+  skip  = 3
+)
+```
+
+::: {.panel-tabset style="color: gray;"}
+## Figure 3
+
+::: {#fig-em-maps}
+```{r figure 3}
+#| echo: false
+#| warning: false
+# print widget
+
+
+ward_pop = ward_pop %>% 
+  filter(`LAD 2022 Name` == "Birmingham") %>% 
+  pivot_longer(cols = c(-`LAD 2022 Name`,-`LAD 2022 Name`,-`Ward 2022 Code`,-`Ward 2022 Name`,-Total,
+                        -`LAD 2022 Code`),
+               names_to = "age",
+               values_to = "count") %>% 
+  group_by(`Ward 2022 Code`,`Ward 2022 Name`) %>% 
+  summarise(count = sum(count),.groups = "drop") %>% 
+  rename(Ward_code = `Ward 2022 Code`,
+         Ward_name = `Ward 2022 Name`) %>% 
+  left_join(ward_EM_summary, by ="Ward_code") %>%  #join em summary with pop estimate
+  group_by(Ward_code, Ward_name, Ward_id) %>% 
+  #standardisation
+  mutate(heat_med = heat_med/count*100000,
+         heat_LL = heat_LL/count*100000,
+         heat_UL = heat_UL/count*100000,
+         cold_med = cold_med/count*100000,
+         cold_LL = cold_LL/count*100000,
+         cold_UL = cold_UL/count*100000,
+         #cold tootip
+         tooltip_cold  = paste0("<B>Ward Name:</B> ", Ward_name, "\n",
+                                "<B>Ward Code:</B> ", Ward_code, "\n",
+                                "<B>Median EM:</B> ", round(cold_med,2), "\n",
+                                "<B>Upper95CrI:</B> ", round(cold_UL,2), "\n",
+                                "<B>Lower95CrI:</B> ", round(cold_LL,2)),
+         #heat tooltip
+         tooltip_heat  = paste0("<B>Ward Name:</B> ", Ward_name, "\n",
+                                "<B>Ward Code:</B> ", Ward_code, "\n",
+                                "<B>Median EM:</B> ", round(heat_med,2), "\n",
+                                "<B>Upper95CrI:</B> ", round(heat_UL,2), "\n",
+                                "<B>Lower95CrI:</B> ", round(heat_LL,2)),
+  )
+
+
+
+
+
+
+
+figure3_1 =ggplot(ward_map %>% 
+  left_join(ward_pop, by = c("Ward_Code"="Ward_code")))+
+  geom_sf_interactive(color = "white", aes(fill=cold_med,data_id = Ward_Code, tooltip = tooltip_cold))+
+  scale_fill_distiller(palette = "Blues", direction = 1)+
+  labs(fill = "per 100,000")+
+  ggtitle("Posterior Median Estimates of Annual Cold-Related \nExcess Mortality")+
+  theme_void(base_size = 16) +
+  theme()
+
+
+
+
+
+figure3_2 = ggplot(ward_map %>% 
+         left_join(ward_pop, by = c("Ward_Code"="Ward_code")))+
+  geom_sf_interactive(color = "white", aes(fill=heat_med,data_id = Ward_Code, tooltip = tooltip_heat))+
+  scale_fill_distiller(palette = "Reds", direction = 1)+
+  labs(fill = "per 100,000")+
+  ggtitle("Posterior Median Estimates of Annual Heat-Related \nExcess Mortality")+
+  theme_void(base_size = 16) +
+  theme()
+
+
+
+figure3 = figure3_1+figure3_2
+
+
+
+
+girafe(
+  ggobj = figure3,
+  width_svg = 14,
+  height_svg = 10,
+  options = list(
+    opts_hover(css = hover_css),
+    opts_tooltip(css = tooltip_css),
+    opts_hover_inv(css = "")))
+
+```
+
+Ward-level posterior median annual cold- and heat-related excess mortality rates in Birmingham (MMT-referenced), per 100,000
+:::
+
+## Figure 4
+
+::: {#fig-x-em-maps}
+```{r data for figure 4}
+#| echo: false
+#| warning: false
+# print widget
+ward_X_EM_summary = read_rds(here("output", "X_heat_and_cold_related_EM_ward.rds"))
+
+
+
+ward_pop = read_excel(here("data", "external", "population", "sapewardstablefinal.xlsx"),
+  sheet = "Mid-2022 Ward 2022",
+  skip  = 3
+)
+```
+
+```{r figure 4}
+#| warning: false
+#| echo: false
+
+
+ward_pop =  ward_pop %>% 
+  filter(`LAD 2022 Name` == "Birmingham") %>% 
+  pivot_longer(cols = c(-`LAD 2022 Name`,-`LAD 2022 Name`,-`Ward 2022 Code`,-`Ward 2022 Name`,-Total,
+                        -`LAD 2022 Code`),
+               names_to = "age",
+               values_to = "count") %>% 
+  group_by(`Ward 2022 Code`,`Ward 2022 Name`) %>% 
+  summarise(count = sum(count), .groups = "drop") %>% 
+  rename(Ward_code = `Ward 2022 Code`,
+         Ward_name = `Ward 2022 Name`) %>% 
+  left_join(ward_X_EM_summary, by ="Ward_code") %>%  #join em summary with pop estimate
+  group_by(Ward_code, Ward_name, Ward_id) %>% 
+  #standardisation
+  mutate(heat_med = heat_med/count*100000,
+         heat_LL = heat_LL/count*100000,
+         heat_UL = heat_UL/count*100000,
+         cold_med = cold_med/count*100000,
+         cold_LL = cold_LL/count*100000,
+         cold_UL = cold_UL/count*100000,
+         #cold tootip
+         tooltip_cold  = paste0("<B>Ward Name:</B> ", Ward_name, "\n",
+                                "<B>Ward Code:</B> ", Ward_code, "\n",
+                                "<B>Median EM:</B> ", round(cold_med,2), "\n",
+                                "<B>Upper95CrI:</B> ", round(cold_UL,2), "\n",
+                                "<B>Lower95CrI:</B> ", round(cold_LL,2)),
+         #heat tooltip
+         tooltip_heat  = paste0("<B>Ward Name:</B> ", Ward_name, "\n",
+                                "<B>Ward Code:</B> ", Ward_code, "\n",
+                                "<B>Median EM:</B> ", round(heat_med,2), "\n",
+                                "<B>Upper95CrI:</B> ", round(heat_UL,2), "\n",
+                                "<B>Lower95CrI:</B> ", round(heat_LL,2))
+  )
+
+
+
+
+figure4_1 =ggplot(ward_map %>% 
+                    left_join(ward_pop, by = c("Ward_Code"="Ward_code")))+
+  geom_sf_interactive(color = "white", aes(fill=cold_med,data_id = Ward_Code, tooltip = tooltip_cold))+
+  scale_fill_distiller(palette = "Blues", direction = 1)+
+  labs(fill = "per 100,000")+
+  ggtitle("Posterior Median Estimates of Annual Excess \nMortality due to teperatures below 2.5th percentile")+
+  theme_void(base_size = 16) +
+  theme()
+
+
+
+
+
+figure4_2 = ggplot(ward_map %>% 
+                     left_join(ward_pop, by = c("Ward_Code"="Ward_code")))+
+  geom_sf_interactive(color = "white", aes(fill=heat_med,data_id = Ward_Code, tooltip = tooltip_heat))+
+  scale_fill_distiller(palette = "Reds", direction = 1)+
+  labs(fill = "per 100,000")+
+  ggtitle("Posterior Median Estimates of Annual Excess \nMortality due to teperatures above 97.5th percentile")+
+  theme_void(base_size = 16) +
+  theme()
+
+
+
+
+figure4 = figure4_1+figure4_2
+
+
+
+
+girafe(
+  ggobj = figure4,
+  width_svg = 14,
+  height_svg = 10,
+  options = list(
+    opts_hover(css = hover_css),
+    opts_tooltip(css = tooltip_css),
+    opts_hover_inv(css = "")))
+
+
+
+
+```
+
+Ward-level posterior median annual excess mortality rates in Birmingham due to temperatures below 2.5th and above 97.5th percentile , per 100,000
+:::
+:::
+
+Figure 3 and 4 show the cold- and heat-related excess mortality at ward-level projected under 4 different RCPs . The colour is getting lighter for cold-related excess mortality and conversely getting darker for heat-related excess mortality. The projected change under RCP 8.5 shows the strongest shifts with clearer decline in cold-related excess mortality and heat-related excess mortality by the 2060s and 2070s. Under lower emission pathways (RCP2.6-6.0), changes are less obvious and smaller. Since the projection used the fitted coefficients from the model, the spatial pattern remains similar to previous figures. Overall, these figures illustrate a transition from cold-dominated burden toward increasing heat-related risk later in the century.
+
+![Figure 4. Ward-level posterior median projections of annual cold-related excess mortality (%) in Birmingham by emissions scenario (RCP2.6, RCP4.5, RCP6.0, RCP8.5) and decade (baseline, 2030s–2070s)](images/cold_projection_posterior_median_AF.png)
+
+![Figure 5. Ward-level posterior median projections of annual heat-related excess mortality (%) in Birmingham by emissions scenario (RCP2.6, RCP4.5, RCP6.0, RCP8.5) and decade (baseline, 2030s–2070s)](images/heat_projection_posterior_median_AF.png)
+
+## Discussion
+
+testing
