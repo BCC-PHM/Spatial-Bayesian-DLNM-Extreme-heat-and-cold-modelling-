@@ -689,6 +689,354 @@ pdf_combine(
 
 
 #--------------------------------------------------------
+#========================================================
+#exceedance prob for RR at P99/P1 >1
+#--------------------------------------------------------
+
+
+
+
+RR_Prob_plot_list = list()
+for(i in 1:69){
+
+current_ward_code = unique(df_complete$ward22cd[df_complete$new_id == i])
+current_ward_name = ward_map$Ward_Name[ward_map$Ward_Code == current_ward_code]
+  
+  
+  
+idx_99 =which(names(x_temp[[i]]) == "99.0%")
+idx_1 = which(names(x_temp[[i]]) == "1.0%")
+
+
+
+RR_draws_P1  = rr_mmt_centered[[i]][idx_1, ] 
+RR_draws_P99  = rr_mmt_centered[[i]][idx_99, ]
+
+
+
+plot_df = data.frame(
+  RR_draws_P1 = mean(RR_draws_P1>1),
+  RR_draws_P99 = mean(RR_draws_P99 >1),
+  Ward_id = i,
+  Ward_code = current_ward_code,
+  Ward_name = current_ward_name) 
+
+
+RR_Prob_plot_list[[i]] = plot_df
+
+}
+
+RR_prob_df <- dplyr::bind_rows(RR_Prob_plot_list)
+
+
+
+write_rds(RR_prob_df, "output/RR_exceedance_prob.rds")
+
+
+
+
+plot_sf = ward_map %>%
+  left_join(RR_prob_df, by = c("Ward_Code" = "Ward_code")) %>%
+  mutate(
+    RR_draws_P99 = as.numeric(RR_draws_P99),
+    RR_draws_P99_grey90 = if_else(RR_draws_P99 < 0.90, NA_real_, RR_draws_P99),
+    
+    evidence_99th = case_when(
+      is.na(RR_draws_P99)  ~ "Missing",
+      RR_draws_P99 >= 0.95 ~ "Strong evidence (≥0.95)",
+      RR_draws_P99 >= 0.90 ~ "Some evidence (0.90–0.95)",
+      TRUE                 ~ "No evidence (<0.90)"
+    ),
+    
+    tooltip_99th = paste0(
+      "<B>Pr(RR at P99)>1:</B> ", round(RR_draws_P99, 2),
+      "\n<B>Inference:</B> ", evidence_99th
+    ),
+    RR_draws_P1 = as.numeric(RR_draws_P1),
+    RR_draws_P1_grey90 = if_else(RR_draws_P1 < 0.90, NA_real_, RR_draws_P1),
+    evidence_P1 = case_when(
+      is.na(RR_draws_P1)  ~ "Missing",
+      RR_draws_P1 >= 0.95 ~ "Strong evidence (≥0.95)",
+      RR_draws_P1 >= 0.90 ~ "Some evidence (0.90–0.95)",
+      TRUE                 ~ "No evidence (<0.90)"
+    ),
+    tooltip_P1 = paste0(
+      "<B>Pr(RR at P1)>1:</B> ", round(RR_draws_P1, 3),
+      "\n<B>Inference:</B> ", evidence_P1
+    ))
+    
+    
+
+
+
+#custom css
+tooltip_css = "
+  background: rgba(255, 255, 255, 0.97);
+  color: #1f2937;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(17, 24, 39, 0.12);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
+  font-size: 16px;
+  line-height: 1.35;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+"
+
+hover_css = "
+  cursor: pointer;
+  stroke: #111827 ;    /* darker border */
+  stroke-width: 1.5px ;  /* thicker border */
+  opacity: 1 ;         /* keep fill the same */
+  transition: all 0.15s ease-out;
+"
+
+
+
+
+figure_1_Prob = ggplot(plot_sf) +
+  geom_sf_interactive(aes(fill = RR_draws_P99_grey90, data_id = Ward_Code, tooltip = tooltip_99th),color = "white") +
+  scale_fill_distiller(
+    palette  = "Reds",
+    direction = 1,
+    na.value = "grey85",
+    limits   = c(0.90, 1.00),                 # keep the legend focused on 0.90–1.00
+    breaks   = c(0.90, 0.95, 1.00)
+  ) +
+  labs(fill = "Probability") +
+  ggtitle("Exceedance probability that relative risk exceeds 1 \nat the 99th percentile temperature")+
+  theme_void(base_size = 16) +
+  theme()
+
+
+
+
+figure_2_Prob = ggplot(plot_sf) +
+  geom_sf_interactive(aes(fill = RR_draws_P1_grey90, data_id = Ward_Code, tooltip = tooltip_P1),color = "white") +
+  scale_fill_distiller(
+    palette  = "Blues",
+    direction = 1,
+    na.value = "grey85",
+    limits   = c(0.90, 1.00),                 # keep the legend focused on 0.90–1.00
+    breaks   = c(0.90, 0.95, 1.00)
+  ) +
+  labs(fill = "Probability") +
+  ggtitle("Exceedance probability that relative risk exceeds 1 \nat the 99th percentile temperature")+
+  theme_void(base_size = 16) +
+  theme()
+
+
+
+
+ggiraph::girafe(
+  ggobj = figure_1_Prob,
+  width_svg = 14,
+  height_svg = 10,
+  options = list(
+    opts_hover(css = hover_css),
+    opts_tooltip(css = tooltip_css),
+    opts_hover_inv(css = "")))
+
+
+
+
+ggiraph::girafe(
+  ggobj = figure_2_Prob ,
+  width_svg = 14,
+  height_svg = 10,
+  options = list(
+    opts_hover(css = hover_css),
+    opts_tooltip(css = tooltip_css),
+    opts_hover_inv(css = "")))
+
+#========================================================
+#to obtain the heatmap for RR and get the birmingham overall RR heat and cold  
+mmt_draws_by_ward = vector("list", 69)
+log_rr_mmt_centered  = vector("list", 69)
+
+
+for (i in 1:69){
+  
+  
+  # Extract the posterior samples of the coefficients (e.g., from INLA or MCMC).
+  # Dimensions: 1000 rows x 30 columns.
+  beta_reg = cb_res[[i]]
+  
+  # Extract the cross-basis prediction matrix for this location.
+  # Dimensions: 119 rows x 30 columns 
+  cb_i = cb_pred[[i]]
+  
+  #
+  
+  rr = cb_i %*% t(beta_reg)
+  
+  
+  # 3. Define Reference Temperature (Centering)
+  # Find the index in the 'percentiles' vector corresponding to the 90th percentile.
+  # This will be our reference point (RR = 1).
+  i_cen = which(percentiles == 0.9)
+  
+  # Center the predictions.
+  # For each simulation (column of rr), subtract the value at the reference index.
+  # This ensures that at the 30th percentile, the log-RR is always 0.
+  rr_cen = apply(rr, 2, function(x) x - x[i_cen])
+  
+  
+  full_1000_rr = exp(rr_cen)
+  
+  
+  # temperature grid used to compute RR
+  temp_grid <- x_temp[[i]]
+  
+  # tocontraint temp bounds (change if needed)
+  t_bounds = quantile(x_temp[[i]], probs = c(0.01, 0.99), na.rm = TRUE)
+  
+  # indices of grid points inside bounds
+  ok_idx = x_temp[[i]] >= t_bounds[1] &  x_temp[[i]] <= t_bounds[2]
+  
+  
+  #Get global indices once
+  allowed_idx = which(ok_idx)
+  
+  
+  
+  #find the lowest RR for each simulated posterior from full_1000_rr
+  
+  min_RR_position =  apply(full_1000_rr[allowed_idx, , drop = FALSE],2, function(x) allowed_idx[ which.min(x) ])
+  
+  
+  #initialise an empty dataframe to store each specific mmt below
+  store_specific_mmt = matrix(nrow=length(x_temp[[i]]), ncol=1000)
+  
+  
+  for(n in 1:1000){ #for every simulated posterior 
+    
+    #apply the simulation-specific min rr to each col in the rr matrix to re-centre, after that, write in into the matrix
+    store_specific_mmt[,n]= rr[,n]-rr[,n][min_RR_position[n]]
+    
+    
+    
+    
+  }
+  
+  mmt_draws_by_ward[[i]] = data.frame(nsim = seq_len(ncol(rr)),
+                                      MMT = as.numeric(x_temp[[i]][min_RR_position]),
+                                      Ward_code = ward_map$Ward_Code[ward_map$Ward_Code == unique(df_complete$ward22cd[df_complete$new_id == i])],
+                                      Ward_id = i
+  )
+  
+  log_rr_mmt_centered[[i]] = store_specific_mmt
+  
+}
+
+#-------------------------------------------------------------
+
+n_wards = 69
+
+# Use log scale for aggregation (stable), then exp back to RR
+# Step 1: ward-level posterior medians at each percentile (logRR)
+ward_logRR_med_mat = sapply(1:n_wards, function(i){
+  apply(log_rr_mmt_centered[[i]], 1,  function (x) mean(x))  # length nTemp
+})
+ward_logRR_med_mat = t(ward_logRR_med_mat)  # wards x nTemp
+
+# Step 2: Birmingham "overall" at each percentile across wards (median + CrI)
+bham_logRR_mean = apply(ward_logRR_med_mat, 2, mean, na.rm = TRUE)
+bham_logRR_lo  = apply(ward_logRR_med_mat, 2, quantile, 0.025, na.rm = TRUE)
+bham_logRR_hi  = apply(ward_logRR_med_mat, 2, quantile, 0.975, na.rm = TRUE)
+
+bham_RR_by_pct = data.frame(
+  Percentile = names(x_temp[[1]]),          
+  RR_mean = exp(bham_logRR_mean),
+  RR_lo  = exp(bham_logRR_lo),
+  RR_hi  = exp(bham_logRR_hi)
+)
+
+#--------------------------------------------
+exceedance_prob_list = vector("list", 69)
+
+nrow(bham_RR_by_pct)
+
+for(i in 1:69){
+
+ward_rr_mmt_centered = rr_mmt_centered[[i]]
+  
+
+exceedance_vec = sapply(1:119, function(n){
+  mean(ward_rr_mmt_centered[n,] >bham_RR_by_pct$RR_mean[[n]])})  
+
+exceedance_prob_list[[i]] = data.frame(
+  Ward_id = i,
+  Ward_code = unique(df_complete$ward22cd[df_complete$new_id == i]),
+  Ward_name = ward_map$Ward_Name[ward_map$Ward_Code == unique(df_complete$ward22cd[df_complete$new_id == i])],
+  Percentile = bham_RR_by_pct$Percentile,
+  p_exceed_bham = exceedance_vec
+  
+)
+
+}
+
+
+#-------------------------------------------------------------------------
+
+exceedance_prob_df <- dplyr::bind_rows(exceedance_prob_list) %>%
+  mutate(
+    Percentile = factor(Percentile, levels = unique(Percentile)),
+    Ward_name  = factor(Ward_name, levels = rev(sort(unique(Ward_name))))
+  )
+
+
+
+
+write_rds(exceedance_prob_df, "output/Exceedance_prob_RR_greater_mean.rds")
+
+
+
+
+
+
+ggplot(exceedance_prob_df, aes(x = Percentile, y = Ward_name, fill = p_exceed_bham)) +
+  geom_tile() +
+  scale_fill_distiller(
+    palette = "Greens",
+    direction = 1,
+    limits = c(0, 1),
+    oob = squish
+  ) +
+  scale_x_discrete(breaks = c("0.0%", "1.0%","10.0%","25.0%","50.0%","75.0%","90.0%","99.0%" ,"100.0%")) +
+  labs(
+    title = "Exceedance probability of ward RR is higher than the mean RR of Brimingham at \nevery temperature percentile",
+    x = "Temperature percentile",
+    y = NULL,
+    fill = "Probability"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    axis.text.x = element_text(angle = 0, vjust = 1, size = 10),
+    axis.text.y = element_text(size = 10)
+  )
+
+
+#==============================================================================
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

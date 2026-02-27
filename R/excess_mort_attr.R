@@ -190,6 +190,7 @@ cat("==============================================\n")
 
 write_rds(ward_specific_cumul_RR, "output/ward_specific_cumul_RR.rds")
 
+ward_specific_cumul_RR = readRDS("output/ward_specific_cumul_RR.rds")
 
 ##########################################################################
 # ======================================================================
@@ -229,6 +230,7 @@ excess_mortality_daily_by_ward[[i]] = AN_daily
 
 write_rds(excess_mortality_daily_by_ward, "output/excess_mortality_daily_by_ward.rds")
 
+excess_mortality_daily_by_ward = read_rds("output/excess_mortality_daily_by_ward.rds")
 ##########################################################
 #==================================================================
 #total excess deaths for ward 
@@ -657,6 +659,337 @@ tmap_save(Xheat_related_em,filename = "figs/Xheat_related_em.png", height = 7,wi
 #merge the plots
 merged_Xcold_Xheat_em = tmap_arrange(Xcold_related_em,Xheat_related_em )
 tmap_save(merged_Xcold_Xheat_em, filename ="figs/merged_Xcold_Xheat_em.png",height = 7,width =12, unit="in",dpi = 600)
+
+##############################################################################################################
+#to calculate the exceedance probability > the bimrigham mean excess mortality 
+
+
+ward_pop = read_excel("data/external/population/sapewardstablefinal.xlsx", 
+                      sheet = "Mid-2022 Ward 2022", skip = 3)
+
+
+
+
+bham_excess_cold_list = vector("list", 1000)
+
+for (i in 1:1000){
+  # 2. Use a temporary name for the math (e.g., current_sum)
+  current_sum = sum(sapply(cold_annual_post, `[`, i))
+  
+  # 3. Save it into the storage list
+  bham_excess_cold_list [[i]] <- data.frame(
+    draws = i,
+    value = current_sum
+  )
+}
+
+bham_excess_cold_df = bind_rows(bham_excess_cold_list)
+
+
+
+bham_excess_heat_list = vector("list", 1000)
+
+for (i in 1:1000){
+  # 2. Use a temporary name for the math (e.g., current_sum)
+  current_sum = sum(sapply(heat_annual_post, `[`, i))
+  
+  # 3. Save it into the storage list
+  bham_excess_heat_list[[i]] <- data.frame(
+    draws = i,
+    value = current_sum
+  )
+}
+
+bham_excess_heat_df = bind_rows(bham_excess_heat_list)
+
+
+bham_pop = ward_pop %>% 
+  filter(`LAD 2022 Name` == "Birmingham") %>% 
+  pivot_longer(cols = c(-`LAD 2022 Name`,-`LAD 2022 Name`,-`Ward 2022 Code`,-`Ward 2022 Name`,-Total,
+                        -`LAD 2022 Code`),
+               names_to = "age",
+               values_to = "count") %>% 
+  group_by(`Ward 2022 Code`,`Ward 2022 Name`) %>% 
+  summarise(count = sum(count)) %>% 
+  rename(Ward_code = `Ward 2022 Code`,
+         Ward_name = `Ward 2022 Name`) %>% 
+  pull(count) %>% 
+  sum()
+
+
+
+bham_mean_cold_EM = mean(bham_excess_cold_df$value)/bham_pop*100000
+
+
+bham_mean_heat_EM = mean(bham_excess_heat_df$value)/bham_pop*100000
+
+quantile(bham_excess_cold_df$value, 0.975)
+
+quantile(bham_excess_cold_df$value, 0.025)
+
+
+quantile(bham_excess_heat_df$value, 0.975)
+
+quantile(bham_excess_heat_df$value, 0.025)
+
+
+
+
+bham_ward_pop = ward_pop %>% 
+  filter(`LAD 2022 Name` == "Birmingham") %>% 
+  pivot_longer(cols = c(-`LAD 2022 Name`,-`LAD 2022 Name`,-`Ward 2022 Code`,-`Ward 2022 Name`,-Total,
+                        -`LAD 2022 Code`),
+               names_to = "age",
+               values_to = "count") %>% 
+  group_by(`Ward 2022 Code`,`Ward 2022 Name`) %>% 
+  summarise(count = sum(count)) %>% 
+  rename(Ward_code = `Ward 2022 Code`,
+         Ward_name = `Ward 2022 Name`) %>% 
+  left_join(df_complete %>% 
+              distinct(new_id,ward22cd), by = c("Ward_code" = "ward22cd"))
+
+# apply(cold_annual_post[[1]],1,function(x) x/(bham_ward_pop$count[[1]])*100000)
+
+
+
+exceedance_EM_cold = vector("list",69)
+
+for (i in 1:69){
+
+exceedance_EM_cold[[i]] = mean(cold_annual_post[[i]]/(bham_ward_pop$count[[i]])*100000>bham_mean_cold_EM)
+
+
+}
+
+
+exceedance_EM_heat = vector("list",69)
+
+for (i in 1:69){
+  
+  exceedance_EM_heat[[i]] = mean(heat_annual_post[[i]]/(bham_ward_pop$count[[i]])*100000>bham_mean_heat_EM)
+  
+  
+}
+
+
+exceed_heat = unlist(exceedance_EM_heat, use.names = FALSE)
+exceed_cold = unlist(exceedance_EM_cold, use.names = FALSE)
+
+exceed_df = tibble::tibble(
+  Ward_id = 1:69,
+  p_heat_gt_bham = exceed_heat,
+  p_cold_gt_bham = exceed_cold
+)
+
+
+
+ exceed_prob_EM_gt_bham_heatcold = exceed_df %>% 
+  left_join(df_complete %>% 
+              distinct(new_id,ward22cd), by = c("Ward_id" = "new_id"))
+
+
+write_rds(exceed_prob_EM_gt_bham_heatcold, "output/exceed_prob_EM_gt_bham_heatcold.rds")
+
+
+em_exceedance_plot_df = ward_map %>% 
+  left_join(exceed_prob_EM_gt_bham_heatcold, by = c("Ward_Code" = "ward22cd")) %>% 
+  mutate(evidence_cold = case_when(is.na(p_cold_gt_bham)  ~ "Missing",
+                                   p_cold_gt_bham  >= 0.95 ~ "Strong evidence (≥0.95)",
+                                   p_cold_gt_bham  >= 0.90 ~ "Some evidence (0.90–0.95)",
+                                    TRUE                 ~ "No evidence (<0.90)"),
+         evidence_heat = case_when(is.na(p_heat_gt_bham)  ~ "Missing",
+                                   p_heat_gt_bham  >= 0.95 ~ "Strong evidence (≥0.95)",
+                                   p_heat_gt_bham  >= 0.90 ~ "Some evidence (0.90–0.95)",
+                                   TRUE                 ~ "No evidence (<0.90)"),
+         
+       tooltip_cold = paste0(
+      "<B>Ward Name:</B> ",Ward_Name, "\n",
+      "<B>Ward Code:</B> ", Ward_Code, "\n",
+      "<B>Pr(EM > mean EM):</B> ", p_cold_gt_bham, "\n",
+      "<B>Inference:</B> ",evidence_cold),
+      tooltip_heat = paste0(
+        "<B>Ward Name:</B> ",Ward_Name, "\n",
+        "<B>Ward Code:</B> ", Ward_Code, "\n",
+        "<B>Pr(EM > mean EM):</B> ", p_heat_gt_bham, "\n",
+        "<B>Inference:</B> ",evidence_heat) )
+
+
+ggplot(em_exceedance_plot_df )+
+  geom_sf_interactive(aes(fill = p_heat_gt_bham, tooltip = tooltip_heat, data_id = Ward_Code))+
+  scale_fill_distiller(
+    palette  = "Reds",
+    direction = 1,
+    na.value = "grey85",
+    limits   = c(0.0,1.00)
+  )+
+  labs(fill = "Pr(EM>mean EM)") +
+  ggtitle("Exceedance probability that heat-related excess mortality rate \nin the ward is higher than the overall Birmingham mean \nheat-realted excess mortality")+
+  theme_void(base_size = 16) +
+  theme()
+
+
+
+ggplot(em_exceedance_plot_df )+
+  geom_sf_interactive(aes(fill = p_cold_gt_bham,tooltip = tooltip_cold, data_id = Ward_Code))+
+  scale_fill_distiller(
+    palette  = "Blues",
+    direction = 1,
+    na.value = "grey85",
+    limits   = c(0.0,1.00)
+  )+
+  labs(fill = "Pr(EM>mean EM)") +
+  ggtitle("Exceedance probability that cold-related excess mortality rate \nin the ward is higher than the overall Birmingham mean \ncold-realted excess mortality")+
+  theme_void(base_size = 16) +
+  theme()
+
+##############################################################################################################
+#to calculate the exceedance probability > the bimrigham mean excess mortality at 2.5th and 97.5th percentile 
+
+
+ward_pop = read_excel("data/external/population/sapewardstablefinal.xlsx", 
+                      sheet = "Mid-2022 Ward 2022", skip = 3)
+
+
+X_heat_annual_post = read_rds("output/X_heat_annual_post_EM_ward.rds")
+X_cold_annual_post = read_rds("output/X_cold_annual_post_EM_ward.rds")
+
+
+
+
+
+
+bham_excess_Xcold_list = vector("list", 1000)
+
+for (i in 1:1000){
+  # 2. Use a temporary name for the math (e.g., current_sum)
+  current_sum = sum(sapply(X_cold_annual_post, `[`, i))
+  
+  # 3. Save it into the storage list
+  bham_excess_Xcold_list [[i]] <- data.frame(
+    draws = i,
+    value = current_sum
+  )
+}
+
+bham_excess_Xcold_df = bind_rows(bham_excess_Xcold_list)
+
+
+
+
+
+bham_excess_Xheat_list = vector("list", 1000)
+
+for (i in 1:1000){
+  # 2. Use a temporary name for the math (e.g., current_sum)
+  current_sum = sum(sapply(X_heat_annual_post, `[`, i))
+  
+  # 3. Save it into the storage list
+  bham_excess_Xheat_list [[i]] <- data.frame(
+    draws = i,
+    value = current_sum
+  )
+}
+
+bham_excess_Xheat_df = bind_rows(bham_excess_Xheat_list)
+
+
+
+
+
+bham_pop = ward_pop %>% 
+  filter(`LAD 2022 Name` == "Birmingham") %>% 
+  pivot_longer(cols = c(-`LAD 2022 Name`,-`LAD 2022 Name`,-`Ward 2022 Code`,-`Ward 2022 Name`,-Total,
+                        -`LAD 2022 Code`),
+               names_to = "age",
+               values_to = "count") %>% 
+  group_by(`Ward 2022 Code`,`Ward 2022 Name`) %>% 
+  summarise(count = sum(count)) %>% 
+  rename(Ward_code = `Ward 2022 Code`,
+         Ward_name = `Ward 2022 Name`) %>% 
+  pull(count) %>% 
+  sum()
+
+
+
+bham_mean_Xcold_EM = mean(bham_excess_Xcold_df$value)/bham_pop*100000
+
+
+bham_mean_Xheat_EM = mean(bham_excess_Xheat_df$value)/bham_pop*100000
+
+quantile(bham_excess_Xcold_df$value, 0.975)
+
+quantile(bham_excess_Xcold_df$value, 0.025)
+
+
+quantile(bham_excess_Xheat_df$value, 0.975)
+
+quantile(bham_excess_Xheat_df$value, 0.025)
+
+
+
+bham_ward_pop = ward_pop %>% 
+  filter(`LAD 2022 Name` == "Birmingham") %>% 
+  pivot_longer(cols = c(-`LAD 2022 Name`,-`LAD 2022 Name`,-`Ward 2022 Code`,-`Ward 2022 Name`,-Total,
+                        -`LAD 2022 Code`),
+               names_to = "age",
+               values_to = "count") %>% 
+  group_by(`Ward 2022 Code`,`Ward 2022 Name`) %>% 
+  summarise(count = sum(count)) %>% 
+  rename(Ward_code = `Ward 2022 Code`,
+         Ward_name = `Ward 2022 Name`) %>% 
+  left_join(df_complete %>% 
+              distinct(new_id,ward22cd), by = c("Ward_code" = "ward22cd"))
+
+
+
+exceedance_EM_Xcold = vector("list",69)
+
+for (i in 1:69){
+  
+  exceedance_EM_Xcold[[i]] = mean(X_cold_annual_post[[i]]/(bham_ward_pop$count[[i]])*100000>bham_mean_Xcold_EM)
+  
+  
+}
+
+
+exceedance_EM_Xheat = vector("list",69)
+
+for (i in 1:69){
+  
+  exceedance_EM_Xheat[[i]] = mean(X_heat_annual_post[[i]]/(bham_ward_pop$count[[i]])*100000>bham_mean_Xheat_EM)
+  
+  
+}
+
+
+exceed_Xheat = unlist(exceedance_EM_Xheat, use.names = FALSE)
+exceed_Xcold = unlist(exceedance_EM_Xcold, use.names = FALSE)
+
+exceed_Xdf = tibble::tibble(
+  Ward_id = 1:69,
+  p_Xheat_gt_bham = exceed_Xheat,
+  p_Xcold_gt_bham = exceed_Xcold
+)
+
+
+exceed_prob_EM_gt_bham_X_heatcold = exceed_Xdf %>% 
+  left_join(df_complete %>% 
+              distinct(new_id,ward22cd), by = c("Ward_id" = "new_id"))
+
+
+write_rds(exceed_prob_EM_gt_bham_X_heatcold, "output/exceed_prob_EM_gt_bham_X_heatcold.rds")
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
