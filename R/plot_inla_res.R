@@ -191,71 +191,92 @@ beta_reg = cb_res[[i]]
 # Dimensions: 119 rows x 30 columns 
 cb_i = cb_pred[[i]]
 
-#
+# Overall cumulative log-RR curve:
+# temperature grid x posterior draws
 
 rr = cb_i %*% t(beta_reg)
 
-
-# 3. Define Reference Temperature (Centering)
-# Find the index in the 'percentiles' vector corresponding to the 90th percentile.
-# This will be our reference point (RR = 1).
-i_cen = which(percentiles == 0.9)
-
-# Center the predictions.
-# For each simulation (column of rr), subtract the value at the reference index.
-# This ensures that at the 30th percentile, the log-RR is always 0.
-rr_cen = apply(rr, 2, function(x) x - x[i_cen])
-
-
-full_1000_rr = exp(rr_cen)
-
-
-# temperature grid used to compute RR
-temp_grid <- x_temp[[i]]
-
-# tocontraint temp bounds (change if needed)
-t_bounds = quantile(x_temp[[i]], probs = c(0.01, 0.99), na.rm = TRUE)
-
-# indices of grid points inside bounds
-ok_idx = x_temp[[i]] >= t_bounds[1] &  x_temp[[i]] <= t_bounds[2]
-
-
-#Get global indices once
-allowed_idx = which(ok_idx)
-
-
-
-#find the lowest RR for each simulated posterior from full_1000_rr
-
-min_RR_position =  apply(full_1000_rr[allowed_idx, , drop = FALSE],2, function(x) allowed_idx[ which.min(x) ])
-
-
-#initialise an empty dataframe to store each specific mmt below
-store_specific_mmt = matrix(nrow=length(x_temp[[i]]), ncol=1000)
-             
-
-for(n in 1:1000){ #for every simulated posterior 
-
-#apply the simulation-specific min rr to each col in the rr matrix to re-centre, after that, write in into the matrix
-store_specific_mmt[,n]= rr[,n]-rr[,n][min_RR_position[n]]
-
-
-
-
-}
-
-mmt_draws_by_ward[[i]] = data.frame(nsim = seq_len(ncol(rr)),
-                       MMT = as.numeric(x_temp[[i]][min_RR_position]),
-                       Ward_code = ward_map$Ward_Code[ward_map$Ward_Code == unique(df_complete$ward22cd[df_complete$new_id == i])],
-                       Ward_id = i
+# Search between P1 and P99
+allowed_idx = which(
+  percentiles >= 0.01 &
+    percentiles <= 0.99
 )
 
-rr_mmt_centered[[i]] = exp(store_specific_mmt)
+# Find draw-specific MMT
+min_RR_position = apply(
+  rr[allowed_idx, , drop = FALSE],
+  2,
+  function(x) {
+    
+    minimum_logRR = min(
+      x,
+      na.rm = TRUE )
+    
+    # All temperatures whose RR is within 1%
+    # of the minimum RR
+    near_minimum = which(
+      x <= minimum_logRR + log(1.01)
+    )
+    # Select warmest point in minimum-risk plateau
+    allowed_idx[max(near_minimum)]
+  }
+)
+
+# Log-RR at each draw-specific MMT
+logRR_at_MMT = rr[
+  cbind(
+    min_RR_position,
+    seq_len(ncol(rr))
+  )
+]
+
+
+# Centre each posterior draw at its own MMT
+store_specific_mmt = sweep(
+  rr,
+  MARGIN = 2,
+  STATS = logRR_at_MMT,
+  FUN = "-"
+)
+
+current_ward_code = unique(
+  df_complete$ward22cd[
+    df_complete$new_id == i
+  ]
+)
+
+mmt_draws_by_ward[[i]] = tibble(
+  nsim = seq_len(ncol(rr)),
+  MMT = as.numeric(
+    x_temp[[i]][min_RR_position]
+  ),
+  Ward_code = current_ward_code,
+  Ward_id = i
+)
+
+rr_mmt_centered[[i]] = exp(
+  store_specific_mmt
+)
 
 }
+mmt_diagnostic = map_dfr(
+  mmt_draws_by_ward,
+  function(x) {
+    tibble(
+      Ward_id = unique(x$Ward_id),
+      MMT_min = min(x$MMT),
+      MMT_p025 = quantile(x$MMT, 0.025),
+      MMT_median = median(x$MMT),
+      MMT_p975 = quantile(x$MMT, 0.975),
+      MMT_max = max(x$MMT)
+    )
+  }
+)
 
+mmt_diagnostic
+summary(mmt_diagnostic$MMT_median)
 
-write_rds(mmt_draws_by_ward, "output/mmt_draws_by_ward.rds")
+write_rds(mmt_draws_by_ward, "output/mmt_draws_by_ward_new.rds")
 
 
 ###############################################################################
@@ -264,6 +285,8 @@ write_rds(mmt_draws_by_ward, "output/mmt_draws_by_ward.rds")
 #===============================================================================
 #plot all the ward median exposure response curves
 #===============================================================================
+MMT_new = read_rds(
+  "output/mmt_draws_by_ward_new.rds")
 
 RR_MMT_plot_list = list()
 
@@ -290,69 +313,131 @@ cb_i = cb_pred[[i]]
 #resulting a 119 rows x 1000 matrix 
 rr = cb_i %*% t(beta_reg)
 
+#--------------------------------------------------------------
+# Draw-specific MMTs
+#--------------------------------------------------------------
 
-# 3. Define Reference Temperature (Centering)
-# Find the index in the 'percentiles' vector corresponding to the 90th percentile.
-# This will be our reference point (RR = 1).
-i_cen = which(percentiles == 0.9)
+mmt_i = MMT_new[[i]] %>%
+  arrange(nsim)
 
-# Center the predictions.
-# For each simulation (column of rr), subtract the value at the reference index.
-# This ensures that at the 30th percentile, the log-RR is always 0.
-rr_cen = apply(rr, 2, function(x) x - x[i_cen])
+stopifnot(
+  nrow(mmt_i) == ncol(rr),
+  identical(
+    mmt_i$nsim,
+    seq_len(ncol(rr))
+  )
+)
 
-
-# 4. Calculate Final Summary Statistics
-# Convert log-RR back to the normal scale using exp() and calculate
-# the median and 95% Credible Intervals (2.5% and 97.5%).
-
-# Median Estimate
-RR_med = apply(exp(rr_cen), 1, median)
-
-# Lower Bound (2.5%)
-RR_lo  = apply(exp(rr_cen), 1, quantile, probs = 0.025, na.rm = TRUE)
-
-# Upper Bound (97.5%)
-RR_hi  = apply(exp(rr_cen), 1, quantile, probs = 0.975, na.rm = TRUE)
-
-#############################################################
-# Find the index (position) where the Relative Risk is lowest
-i_mmt = which.min(RR_med)
-
-# Extract the actual MMT value from your temperature vector
-mmt_value = x_temp[[i]][i_mmt]
-
-# (Optional) Check what the Risk is at that point (should be the minimum)
-min_risk = RR_med[i_mmt]
+# Find the x_temp grid position corresponding to each MMT draw
+# which.min(abs(...)) is robust to tiny floating-point differences
+mmt_position = vapply(
+  mmt_i$MMT,
+  function(x) {
+    which.min(
+      abs(as.numeric(x_temp[[i]]) - x)
+    )
+  },
+  integer(1)
+)
 
 
-#Use the MMT index we just found as the new centering point
-rr_cen_mmt = apply(rr, 2, function(x) x - x[i_mmt])
+# Extract the log-RR at the corresponding MMT for every draw
+logRR_at_MMT = rr[
+  cbind(
+    mmt_position,
+    seq_len(ncol(rr))
+  )
+]
+
+# Centre each posterior draw at its own MMT
+rr_cen_mmt = sweep(
+  rr,
+  MARGIN = 2,
+  STATS = logRR_at_MMT,
+  FUN = "-"
+)
+
+# Convert from cumulative log-RR to RR
+RR_draws_mmt = exp(rr_cen_mmt)
 
 
-# Recalculate Median and CIs based on this new center
-RR_med_mmt = apply(exp(rr_cen_mmt), 1, median)
-RR_lo_mmt  = apply(exp(rr_cen_mmt), 1, quantile, 0.025, na.rm = TRUE)
-RR_hi_mmt  = apply(exp(rr_cen_mmt), 1, quantile, 0.975, na.rm = TRUE)
+#--------------------------------------------------------------
+# Posterior summaries at each temperature
+#--------------------------------------------------------------
 
+RR_med_mmt = apply(
+  RR_draws_mmt,
+  1,
+  median,
+  na.rm = TRUE
+)
 
-#########################################
+RR_lo_mmt = apply(
+  RR_draws_mmt,
+  1,
+  quantile,
+  probs = 0.025,
+  na.rm = TRUE
+)
+
+RR_hi_mmt = apply(
+  RR_draws_mmt,
+  1,
+  quantile,
+  probs = 0.975,
+  na.rm = TRUE
+)
+
+#--------------------------------------------------------------
+# Summarise the posterior MMT distribution for plotting
+#--------------------------------------------------------------
+
+mmt_median = median(
+  mmt_i$MMT,
+  na.rm = TRUE
+)
+
+mmt_LL = quantile(
+  mmt_i$MMT,
+  0.025,
+  na.rm = TRUE
+)
+
+mmt_UL = quantile(
+  mmt_i$MMT,
+  0.975,
+  na.rm = TRUE
+)
+
+#--------------------------------------------------------------
+# Store plot data
+#--------------------------------------------------------------
 
 plot_df = data.frame(
   Percentage = names(x_temp[[i]]),
   Temp = as.numeric(x_temp[[i]]),
+  
   RR_median = RR_med_mmt,
   RR_LL = RR_lo_mmt,
   RR_UL = RR_hi_mmt,
-  MMT = as.numeric(mmt_value),
+  
+  MMT = as.numeric(mmt_median),
+  MMT_LL = as.numeric(mmt_LL),
+  MMT_UL = as.numeric(mmt_UL),
+  
   Ward_id = i,
   Ward_code = current_ward_code,
-  Ward_name = current_ward_name) %>% 
+  Ward_name = current_ward_name
+) %>%
   mutate(
     legend_label = ifelse(
       Percentage %in% c("1.0%", "99.0%"),
       paste0(
-        ifelse(Percentage == "1.0%", " P1", " P99"),
+        ifelse(
+          Percentage == "1.0%",
+          "P1",
+          "P99"
+        ),
         ": RR ",
         sprintf("%.2f", RR_median),
         " (",
@@ -361,11 +446,22 @@ plot_df = data.frame(
         sprintf("%.2f", RR_UL),
         ")"
       ),
-      NA
+      NA_character_
+    ),
+    
+    mmt_label = paste0(
+      "Median MMT = ",
+      sprintf("%.1f", MMT),
+      "°C\n95% CrI: ",
+      sprintf("%.1f", MMT_LL),
+      "–",
+      sprintf("%.1f", MMT_UL),
+      "°C"
     )
   )
 
 RR_MMT_plot_list[[w]] = plot_df
+
 
 }
 
@@ -373,7 +469,8 @@ RR_MMT_plot_list[[w]] = plot_df
 
 #########################################
 #  Ensure your data is ready
-real_plot_df = data.table::rbindlist(RR_MMT_plot_list)
+real_plot_df = data.table::rbindlist(RR_MMT_plot_list)%>%
+  as_tibble()
 
 write_rds(real_plot_df, file ="output/RR_MMT_plot_data.rds")
 #  Define your batches (Start index for every group of 15)
@@ -596,7 +693,7 @@ tmap_save(merged_1st_99th_RR_plot, filename ="figs/merged_1st_99th_RR_plot.png",
 # MMT = mmt_draws_by_ward
 
 
-mmt_uncertainty_plot_df = data.table::rbindlist(MMT) %>% 
+mmt_uncertainty_plot_df = data.table::rbindlist(MMT_new) %>% 
   group_by(Ward_code,Ward_id) %>% 
   mutate(
     prob_gt_18 = round(mean(MMT > 18, na.rm = TRUE)*100,1),
@@ -849,174 +946,370 @@ ggiraph::girafe(
     opts_hover_inv(css = "")))
 
 #========================================================
-#to obtain the heatmap for RR and get the birmingham overall RR heat and cold  
-mmt_draws_by_ward = vector("list", 69)
-log_rr_mmt_centered  = vector("list", 69)
+#==============================================================================
+# Birmingham overall RR and ward exceedance probabilities
+# Using revised draw-specific P1-P99 plateau MMTs
+#==============================================================================
+
+MMT_new = read_rds(
+  "output/mmt_draws_by_ward_new.rds"
+)
+
+n_wards = length(cb_res)
+n_temp  = length(x_temp[[1]])
+n_sim   = nrow(cb_res[[1]])
+
+stopifnot(
+  length(MMT_new) == n_wards,
+  all(vapply(cb_res, nrow, integer(1)) == n_sim),
+  all(vapply(cb_res, ncol, integer(1)) == ncol(cb_pred[[1]]))
+)
 
 
-for (i in 1:69){
+#------------------------------------------------------------------
+# Centre every posterior curve at its corresponding revised MMT
+#------------------------------------------------------------------
+
+log_rr_mmt_centered = vector(
+  "list",
+  n_wards
+)
+
+rr_mmt_centered = vector(
+  "list",
+  n_wards
+)
+
+
+for (i in seq_len(n_wards)) {
   
-  
-  # Extract the posterior samples of the coefficients (e.g., from INLA or MCMC).
-  # Dimensions: 1000 rows x 30 columns.
   beta_reg = cb_res[[i]]
-  
-  # Extract the cross-basis prediction matrix for this location.
-  # Dimensions: 119 rows x 30 columns 
   cb_i = cb_pred[[i]]
   
-  #
-  
+  # Uncentred cumulative log-RR:
+  # temperature percentiles × posterior draws
   rr = cb_i %*% t(beta_reg)
   
+  mmt_i = MMT_new[[i]] %>%
+    arrange(nsim)
   
-  # 3. Define Reference Temperature (Centering)
-  # Find the index in the 'percentiles' vector corresponding to the 90th percentile.
-  # This will be our reference point (RR = 1).
-  i_cen = which(percentiles == 0.9)
+  stopifnot(
+    nrow(mmt_i) == ncol(rr),
+    all(mmt_i$nsim == seq_len(ncol(rr)))
+  )
   
-  # Center the predictions.
-  # For each simulation (column of rr), subtract the value at the reference index.
-  # This ensures that at the 30th percentile, the log-RR is always 0.
-  rr_cen = apply(rr, 2, function(x) x - x[i_cen])
+  temp_grid_i = as.numeric(
+    x_temp[[i]]
+  )
   
+  # Locate each draw-specific MMT on the ward temperature grid
+  mmt_position = vapply(
+    mmt_i$MMT,
+    function(x) {
+      which.min(
+        abs(temp_grid_i - x)
+      )
+    },
+    integer(1)
+  )
   
-  full_1000_rr = exp(rr_cen)
+  # Confirm the MMT values are represented on the grid
+  stopifnot(
+    max(
+      abs(
+        temp_grid_i[mmt_position] -
+          mmt_i$MMT
+      ),
+      na.rm = TRUE
+    ) < 1e-6
+  )
   
+  # Draw-specific log-RR at the MMT
+  logRR_at_MMT = rr[
+    cbind(
+      mmt_position,
+      seq_len(ncol(rr))
+    )
+  ]
   
-  # temperature grid used to compute RR
-  temp_grid <- x_temp[[i]]
+  # Centre each draw at its own MMT
+  log_rr_mmt_centered[[i]] = sweep(
+    rr,
+    MARGIN = 2,
+    STATS = logRR_at_MMT,
+    FUN = "-"
+  )
   
-  # tocontraint temp bounds (change if needed)
-  t_bounds = quantile(x_temp[[i]], probs = c(0.01, 0.99), na.rm = TRUE)
+  # RR scale
+  rr_mmt_centered[[i]] = exp(
+    log_rr_mmt_centered[[i]]
+  )
+}
+
+
+#------------------------------------------------------------------
+# Combine wards into one array
+#
+# Dimensions:
+# ward × temperature percentile × posterior draw
+#------------------------------------------------------------------
+
+ward_logRR_array = array(
+  NA_real_,
+  dim = c(
+    n_wards,
+    n_temp,
+    n_sim
+  )
+)
+
+
+for (i in seq_len(n_wards)) {
   
-  # indices of grid points inside bounds
-  ok_idx = x_temp[[i]] >= t_bounds[1] &  x_temp[[i]] <= t_bounds[2]
+  stopifnot(
+    nrow(log_rr_mmt_centered[[i]]) == n_temp,
+    ncol(log_rr_mmt_centered[[i]]) == n_sim
+  )
   
-  
-  #Get global indices once
-  allowed_idx = which(ok_idx)
-  
-  
-  
-  #find the lowest RR for each simulated posterior from full_1000_rr
-  
-  min_RR_position =  apply(full_1000_rr[allowed_idx, , drop = FALSE],2, function(x) allowed_idx[ which.min(x) ])
-  
-  
-  #initialise an empty dataframe to store each specific mmt below
-  store_specific_mmt = matrix(nrow=length(x_temp[[i]]), ncol=1000)
-  
-  
-  for(n in 1:1000){ #for every simulated posterior 
-    
-    #apply the simulation-specific min rr to each col in the rr matrix to re-centre, after that, write in into the matrix
-    store_specific_mmt[,n]= rr[,n]-rr[,n][min_RR_position[n]]
-    
-    
-    
-    
+  ward_logRR_array[i, , ] =
+    log_rr_mmt_centered[[i]]
+}
+
+
+stopifnot(
+  !anyNA(ward_logRR_array)
+)
+
+
+#------------------------------------------------------------------
+# Birmingham overall cumulative log-RR
+#
+# Equal weighting across wards, matching your previous approach.
+# Each posterior draw is aggregated separately.
+#------------------------------------------------------------------
+
+ward_weights = rep(
+  1 / n_wards,
+  n_wards
+)
+
+bham_logRR_draws = apply(
+  ward_logRR_array,
+  MARGIN = c(2, 3),
+  FUN = function(x) {
+    sum(
+      x * ward_weights
+    )
   }
+)
+
+# Dimensions should be:
+# temperature percentiles × posterior draws
+stopifnot(
+  nrow(bham_logRR_draws) == n_temp,
+  ncol(bham_logRR_draws) == n_sim
+)
+
+bham_RR_draws = exp(
+  bham_logRR_draws
+)
+
+
+#------------------------------------------------------------------
+# Birmingham posterior summary at every temperature percentile
+#------------------------------------------------------------------
+
+bham_RR_by_pct = tibble(
+  Percentile = names(x_temp[[1]]),
   
-  mmt_draws_by_ward[[i]] = data.frame(nsim = seq_len(ncol(rr)),
-                                      MMT = as.numeric(x_temp[[i]][min_RR_position]),
-                                      Ward_code = ward_map$Ward_Code[ward_map$Ward_Code == unique(df_complete$ward22cd[df_complete$new_id == i])],
-                                      Ward_id = i
+  RR_median = apply(
+    bham_RR_draws,
+    1,
+    median,
+    na.rm = TRUE
+  ),
+  
+  RR_lo = apply(
+    bham_RR_draws,
+    1,
+    quantile,
+    probs = 0.025,
+    na.rm = TRUE
+  ),
+  
+  RR_hi = apply(
+    bham_RR_draws,
+    1,
+    quantile,
+    probs = 0.975,
+    na.rm = TRUE
+  )
+)
+
+
+write_rds(
+  bham_RR_by_pct,
+  "output/Birmingham_overall_RR_by_percentile.rds"
+)
+
+
+#------------------------------------------------------------------
+# Ward exceedance probability relative to Birmingham
+#
+# For each posterior draw:
+# ward log-RR > Birmingham overall log-RR
+#------------------------------------------------------------------
+
+exceedance_prob_list = vector(
+  "list",
+  n_wards
+)
+
+
+for (i in seq_len(n_wards)) {
+  
+  ward_logRR = log_rr_mmt_centered[[i]]
+  
+  stopifnot(
+    identical(
+      dim(ward_logRR),
+      dim(bham_logRR_draws)
+    )
   )
   
-  log_rr_mmt_centered[[i]] = store_specific_mmt
+  exceedance_vec = rowMeans(
+    ward_logRR > bham_logRR_draws,
+    na.rm = TRUE
+  )
   
-}
-
-#-------------------------------------------------------------
-
-n_wards = 69
-
-# Use log scale for aggregation (stable), then exp back to RR
-# Step 1: ward-level posterior medians at each percentile (logRR)
-ward_logRR_med_mat = sapply(1:n_wards, function(i){
-  apply(log_rr_mmt_centered[[i]], 1,  function (x) mean(x))  # length nTemp
-})
-ward_logRR_med_mat = t(ward_logRR_med_mat)  # wards x nTemp
-
-# Step 2: Birmingham "overall" at each percentile across wards (median + CrI)
-bham_logRR_mean = apply(ward_logRR_med_mat, 2, mean, na.rm = TRUE)
-bham_logRR_lo  = apply(ward_logRR_med_mat, 2, quantile, 0.025, na.rm = TRUE)
-bham_logRR_hi  = apply(ward_logRR_med_mat, 2, quantile, 0.975, na.rm = TRUE)
-
-bham_RR_by_pct = data.frame(
-  Percentile = names(x_temp[[1]]),          
-  RR_mean = exp(bham_logRR_mean),
-  RR_lo  = exp(bham_logRR_lo),
-  RR_hi  = exp(bham_logRR_hi)
-)
-
-#--------------------------------------------
-exceedance_prob_list = vector("list", 69)
-
-nrow(bham_RR_by_pct)
-
-for(i in 1:69){
-
-ward_rr_mmt_centered = rr_mmt_centered[[i]]
+  current_ward_code = unique(
+    df_complete$ward22cd[
+      df_complete$new_id == i
+    ]
+  )
   
-
-exceedance_vec = sapply(1:119, function(n){
-  mean(ward_rr_mmt_centered[n,] >bham_RR_by_pct$RR_mean[[n]])})  
-
-exceedance_prob_list[[i]] = data.frame(
-  Ward_id = i,
-  Ward_code = unique(df_complete$ward22cd[df_complete$new_id == i]),
-  Ward_name = ward_map$Ward_Name[ward_map$Ward_Code == unique(df_complete$ward22cd[df_complete$new_id == i])],
-  Percentile = bham_RR_by_pct$Percentile,
-  p_exceed_bham = exceedance_vec
+  current_ward_name = ward_map$Ward_Name[
+    ward_map$Ward_Code ==
+      current_ward_code
+  ]
   
-)
-
+  exceedance_prob_list[[i]] = tibble(
+    Ward_id = i,
+    Ward_code = current_ward_code,
+    Ward_name = current_ward_name,
+    Percentile = names(x_temp[[i]]),
+    p_exceed_bham = exceedance_vec
+  )
 }
 
 
-#-------------------------------------------------------------------------
+#------------------------------------------------------------------
+# Combine ward results
+#------------------------------------------------------------------
 
-exceedance_prob_df <- dplyr::bind_rows(exceedance_prob_list) %>%
+exceedance_prob_df = bind_rows(
+  exceedance_prob_list
+) %>%
   mutate(
-    Percentile = factor(Percentile, levels = unique(Percentile)),
-    Ward_name  = factor(Ward_name, levels = rev(sort(unique(Ward_name))))
+    Percentile = factor(
+      Percentile,
+      levels = names(x_temp[[1]])
+    ),
+    
+    Ward_name = factor(
+      Ward_name,
+      levels = rev(
+        sort(
+          unique(Ward_name)
+        )
+      )
+    )
   )
 
 
+write_rds(
+  exceedance_prob_df,
+  "output/Exceedance_prob_RR_greater_Birmingham.rds"
+)
 
 
-write_rds(exceedance_prob_df, "output/Exceedance_prob_RR_greater_mean.rds")
+#------------------------------------------------------------------
+# Heatmap
+#------------------------------------------------------------------
 
-
-
-
-
-
-ggplot(exceedance_prob_df, aes(x = Percentile, y = Ward_name, fill = p_exceed_bham)) +
+exceedance_heatmap = ggplot(
+  exceedance_prob_df,
+  aes(
+    x = Percentile,
+    y = Ward_name,
+    fill = p_exceed_bham
+  )
+) +
+  
   geom_tile() +
+  
   scale_fill_distiller(
     palette = "Greens",
     direction = 1,
     limits = c(0, 1),
-    oob = squish
+    oob = scales::squish
   ) +
-  scale_x_discrete(breaks = c("0.0%", "1.0%","10.0%","25.0%","50.0%","75.0%","90.0%","99.0%" ,"100.0%")) +
+  
+  scale_x_discrete(
+    breaks = c(
+      "0.0%",
+      "1.0%",
+      "10.0%",
+      "25.0%",
+      "50.0%",
+      "75.0%",
+      "90.0%",
+      "99.0%",
+      "100.0%"
+    )
+  ) +
+  
   labs(
-    title = "Exceedance probability of ward RR is higher than the mean RR of Brimingham at \nevery temperature percentile",
+    title = paste0(
+      "Posterior probability that ward relative risk exceeds ",
+      "the Birmingham overall relative risk"
+    ),
+    subtitle = "Comparison at each ward-specific temperature percentile",
     x = "Temperature percentile",
     y = NULL,
     fill = "Probability"
   ) +
-  theme_minimal(base_size = 14) +
+  
+  theme_minimal(
+    base_size = 14
+  ) +
+  
   theme(
-    axis.text.x = element_text(angle = 0, vjust = 1, size = 10),
-    axis.text.y = element_text(size = 10)
+    axis.text.x = element_text(
+      angle = 0,
+      vjust = 1,
+      size = 10
+    ),
+    
+    axis.text.y = element_text(
+      size = 10
+    ),
+    
+    panel.grid = element_blank()
   )
 
 
-#==============================================================================
+exceedance_heatmap
+
+
+ggsave(
+  filename = "figs/Exceedance_probability_ward_vs_Birmingham.png",
+  plot = exceedance_heatmap,
+  width = 12,
+  height = 14,
+  units = "in",
+  dpi = 600
+)
 
 
 

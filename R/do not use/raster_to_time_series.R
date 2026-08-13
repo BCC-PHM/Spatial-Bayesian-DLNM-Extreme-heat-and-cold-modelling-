@@ -7,6 +7,7 @@ library(stringr)
 library(doParallel)
 library(foreach)
 library(doSNOW)
+library(sf)
 
 ###########################################
 # --- PROJ setup (once) ---
@@ -132,8 +133,8 @@ write.csv(all_combined, file = "data/processed/Raster_to_time_Series.csv")
 
 
 
-
-
+####################################################################################
+#below is a faster run with parallel 
 ####################################################################################
 n_cores = min(6, parallel::detectCores() - 2)
 cl = makeCluster(n_cores)
@@ -215,7 +216,7 @@ registerDoSEQ()
 
 
 
-
+#you can save the final_output as .csv or .rds 
 
 
 

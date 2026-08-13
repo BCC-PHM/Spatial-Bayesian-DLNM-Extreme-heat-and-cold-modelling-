@@ -680,7 +680,7 @@ figure_EM_prob_Xheat = ggplot(em_exceedance_Xplot_df )+
 
 figure_EM_prob_Xcold =
 ggplot(em_exceedance_Xplot_df )+
-  geom_sf_interactive(aes(fill = p_Xcold_gt_bham, tooltip = tooltip_heat, data_id = Ward_Code))+
+  geom_sf_interactive(aes(fill = p_Xcold_gt_bham, tooltip = tooltip_cold, data_id = Ward_Code))+
   scale_fill_distiller(
     palette  = "Blues",
     direction = 1,

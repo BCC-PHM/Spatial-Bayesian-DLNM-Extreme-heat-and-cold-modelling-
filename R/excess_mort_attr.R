@@ -985,9 +985,59 @@ write_rds(exceed_prob_EM_gt_bham_X_heatcold, "output/exceed_prob_EM_gt_bham_X_he
 
 
 
+em_exceedance_Xplot_df = ward_map %>% 
+  left_join(exceed_prob_EM_gt_bham_X_heatcold, by = c("Ward_Code" = "ward22cd")) %>% 
+  mutate(evidence_cold = case_when(is.na(p_Xcold_gt_bham)  ~ "Missing",
+                                   p_Xcold_gt_bham  >= 0.95 ~ "Strong evidence (≥0.95)",
+                                   p_Xcold_gt_bham  >= 0.90 ~ "Some evidence (0.90–0.95)",
+                                   TRUE                 ~ "No evidence (<0.90)"),
+         evidence_heat = case_when(is.na(p_Xheat_gt_bham)  ~ "Missing",
+                                   p_Xheat_gt_bham  >= 0.95 ~ "Strong evidence (≥0.95)",
+                                   p_Xheat_gt_bham  >= 0.90 ~ "Some evidence (0.90–0.95)",
+                                   TRUE                 ~ "No evidence (<0.90)"),
+         
+         tooltip_cold = paste0(
+           "<B>Ward Name:</B> ",Ward_Name, "\n",
+           "<B>Ward Code:</B> ", Ward_Code, "\n",
+           "<B>Pr(EM > mean EM):</B> ", p_Xcold_gt_bham, "\n",
+           "<B>Inference:</B> ",evidence_cold),
+         tooltip_heat = paste0(
+           "<B>Ward Name:</B> ",Ward_Name, "\n",
+           "<B>Ward Code:</B> ", Ward_Code, "\n",
+           "<B>Pr(EM > mean EM):</B> ", p_Xheat_gt_bham, "\n",
+           "<B>Inference:</B> ",evidence_heat) )
 
 
 
+
+ggplot(em_exceedance_Xplot_df )+
+  geom_sf_interactive(aes(fill = p_Xheat_gt_bham, tooltip = tooltip_heat, data_id = Ward_Code))+
+  scale_fill_distiller(
+    palette  = "Reds",
+    direction = 1,
+    na.value = "grey85",
+    limits   = c(0.0,1.00)
+  )+
+  labs(fill = "Pr(EM>mean EM)") +
+  ggtitle("Exceedance probability that excess mortality rate above 97.5th \npercentile in the ward is higher than the overall Birmingham mean \nheat-realted excess mortality")+
+  theme_void(base_size = 16) +
+  theme()
+
+
+
+
+ggplot(em_exceedance_Xplot_df )+
+  geom_sf_interactive(aes(fill = p_Xcold_gt_bham, tooltip = tooltip_heat, data_id = Ward_Code))+
+  scale_fill_distiller(
+    palette  = "Blues",
+    direction = 1,
+    na.value = "grey85",
+    limits   = c(0.0,1.00)
+  )+
+  labs(fill = "Pr(EM>mean EM)") +
+  ggtitle("Exceedance probability that excess mortality rate below 2.5th \npercentile in the ward is higher than the overall Birmingham mean \nheat-realted excess mortality")+
+  theme_void(base_size = 16) +
+  theme()
 
 
 
