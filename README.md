@@ -1,25 +1,59 @@
-# BCC sample project folder
+# **Spatial Bayesian Distributed Lag Non-linear Modelling of Temperature-Related Mortality in Birmingham**
 
-This git repository contains a shell that should be used as the default structure for new projects
-in the analytical team.  It won't fit all circumstances perfectly, and you can make changes and issue a 
-pull request for new features / changes.
+An application of the spatial Bayesian Distributed Lag Non-linear models (SB-DLNMs) introduced by **Quijal-Zamorano et al. (2024)**.
 
-The aim of this template is two-fold: firstly to give a common structure for analytical projects to aid
-reproducibility, secondly to allow for additional security settings as default to prevent accidental upload of files that should not be committed to Git and GitHub.
+The SB-DLNMs estimate temperature-mortality relationships at fine geographical level with limited data, allowing the possibility for local authorities to implement the same method without relying only on national level estimates.
 
-__Please update/replace this README file with one relevant to your project__
+## Method
 
-## To use this template, please use the following practises:
+Analysis is conducted at **2022 electoral ward level across Birmingham**.
 
-* Put any data files in the `data` folder.  This folder is explicitly named in the .gitignore file.  A further layer of security is that all xls, xlsx, csv and pdf files are also explicit ignored in the whole folder as well.  ___If you need to commit one of these files, you must use the `-f` (force) command in `commit`, but you must be sure there is no identifiable data.__
-* Save any documentation, images of support files in the `assets` folder.  This does not mean you should avoid commenting your code, but if you have an operating procedure or supporting documents, add them to this folder.
-* Please save all outputs: data, formatted tables, graphs etc. in the output folder.  This is also implicitly ignored by git, but you can use the `-f` (force) command in `commit` to add any you wish to publish to github.
+1.  **Temperature exposure**\
+    Area-weighted average at Birmingham 2022 ward boundaries using the mean of daily maximum and minimum values of air temperature on 1 km grid across UK obtained from the HadUK-Grid database.
+2.  **Death register**\
+    Daily register of deaths held by Birmingham City Council (BCC) is not publicly available.
 
+Statistics employed:
 
-### Please also consider the following:
-* Linting your code.  This is a formatting process that follows a rule set.  We broadly encourage the tidyverse standard, and recommend the `lintr` package.
-* Comment your code to make sure others can follow.
-* Consider your naming conventions: we recommend `snake case` where spaces are replaced by underscores and no capitals are use. E.g. `outpatient_referral_data`
+1.  Time-stratified case-crossover design using Poisson regression
+2.  Distributed lag non-linear model (DLNM) to capture the delayed and non-linear temperature-mortality relationship
+3.  Bayesian hierarchical spatial modelling using the BYM2 model, allowing ward's exposure-response curve to borrow strength from adjacent neighbours
+4.  Integrated Nested Laplace Approximation (INLA) for model fitting
+5.  Ward-specific minimum mortality temperature (MMT) estimated as a posterior distribution
+6.  Backward attributable fraction framework to calculate attributable numbers and excess mortality
+7.  Posterior summaries reported as medians with 95% credible intervals and exceedance probabilities
 
+## Data
 
-This repository is dual licensed under the [Open Government v3]([https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/) & MIT. All code can outputs are subject to Crown Copyright.
+| Measure                         | Dataset / source         |      Year | Role                     |
+|------------------|------------------|-----------------:|------------------|
+| Daily mean temperature          | HadUK-Grid at 1km        | 2005-2025 | Exposure                 |
+| Daily deaths                    | BCC death register       | 2005–2025 | Outcome                  |
+| Ward-level population estimates | ONS                      |  mid-2022 | Rate denominator         |
+| Spatial boundaries              | ONS ward 2022 boundaries |      2022 | Spatial unit of analysis |
+
+## Main code
+
+-   `01_raster_to_time_series_ward.R` — converts raster data into an area-weighted daily time series at 2022 ward level
+-   `02_all_cause_mortality_process_ward.R` — processes the BCC all-cause death register into daily ward-level counts and builds the case-crossover strata
+-   `03_bayesain_spatial_dnlm.R` — fits the spatial Bayesian DLNM (BYM2 on the cross-basis coefficients) in INLA and draws posterior coefficients
+-   `04_plot_inla_res.R` — plots the ward-specific exposure-response curves and derives the posterior MMT draws
+-   `05_excess_mort_attr.R` — calculates attributable fractions and annual excess deaths by ward
+-   `06_DPH_mmt_draws_0_3.R` — MMT draws specifically for the DPH report
+-   `06a_DPH_raster_to_time_series_ward.R` — ward temperature series for the DPH report period using provisional HadUK-Grid
+-   `07_DPH_efficient_excess_mort_attr.R` — excess mortality attribution for the DPH report
+-   `08_baseline_mort_ward.R` — ward-level baseline mortality
+-   `09_DPH_heatwave_em2026.R` — excess mortality plots for the June and July 2026 heatwave
+-   `10_DPH_report_static_graphs.R` — non-interactive plots made for DPH report
+
+## Output
+
+-   All plots are in the `figs` folder
+
+## Requirements
+
+The analysis was conducted in **R**. Relevant packages include `tidyverse`, `sf`, `exactextractr`, `dlnm`, `INLA`, `spdep`, `tmap`, `readxl`, `doParallel` and `foreach`.
+
+## Reference
+
+Quijal-Zamorano M, Martinez-Beneito MA, Ballester J, Marí-Dell’Olmo M. Spatial bayesian distributed lag non-linear models (SB-DLNM) for small-area exposure-lag-response epidemiological modelling. International Journal of Epidemiology 2024;53:dyae061. <https://doi.org/10.1093/ije/dyae061>.
