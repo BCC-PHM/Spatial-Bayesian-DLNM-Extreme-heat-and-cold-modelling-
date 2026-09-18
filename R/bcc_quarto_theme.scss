@@ -1,0 +1,111 @@
+/*-- scss:defaults --*/
+
+
+/*-- Define colours for later use --*/
+$pink:   #D00070;
+$yellow: #FFAD00;
+$green:  #75BC22;
+$black:  #3c3c3b;
+$purple: #842A82;
+$blue:   #00A9E0;
+$grey:    #E9E9E9;
+
+
+$tint-purple: #F1E8F3; 
+$tint-pink:   #FCF1F7; 
+$tint-yellow: #FFF5E2; 
+$tint-green:  #EFF7E6; 
+$tint-blue:   #E2F5FB;
+
+
+
+$primary: $purple;
+$headings-color:$purple;
+
+/*-- Define font --*/
+$font-family-sans-serif: Verdana, Geneva, "DejaVu Sans", sans-serif;
+$body-color:     $black;
+$link-color:     $purple;
+$headings-color: $black;
+
+
+
+/*-- scss:rules --*/
+
+
+//---- title card:
+
+#title-block-header { background-color: $purple;
+                      border-top-left-radius: 14px;
+                      border-top-right-radius: 14px;
+                      border-bottom-left-radius: 0;
+                      border-bottom-right-radius: 0;
+                      padding: 1.75rem 2rem;
+                      margin: 1.5rem 0 2rem;
+                      position: relative;
+                      overflow: hidden;
+                      line-height: 1.25;
+}
+
+//---- top-left label
+
+#title-block-header::before {
+  content: "Birmingham City Council | Public Health";
+  position: absolute;
+  top: 1.25rem;
+  left: 2rem;
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+
+
+//---- title
+
+#title-block-header.quarto-title-block.default .quarto-title .title {
+    margin-bottom: 0;
+    color: #fff;
+    padding: 30px;
+    transform: translateY(20px);
+    font-size: 1.7rem;
+    font-weight: 800;
+}
+
+
+
+//---- author and published
+#title-block-header .quarto-title-meta-heading {
+  text-transform: none;
+}
+#title-block-header h1.title,
+#title-block-header .quarto-title-meta-heading,
+#title-block-header .quarto-title-meta-contents {
+  color: white;
+}
+
+
+//---- headings
+h1, .h1 { font-size: 1.6rem; margin-top: 2.2rem; }
+h2, .h2 { font-size: 1.4rem; }
+h3, .h3 { font-size: 1.3rem; }
+h4, .h4 { font-size: 1.15rem;  font-weight: 600; }
+.header-section-number { color: $purple; }
+
+
+
+//---- tables
+.table>:not(caption)>*>*{color: #3c3c3b;;}
+
+.table thead th {background: $purple;color: #fff;font-weight: 400;}
+.table td, .table th { border-color: $grey; }
+
+
+//---- warning callout
+.callout { border-radius: 0; border-left-width: 6px; color: $black; }
+@each $name, $col, $tint in (note, $blue, $tint-blue), (important, $pink, $tint-pink), (warning, $yellow, $tint-yellow), (tip, $green, $tint-green), (caution, $yellow, $tint-yellow) {
+  div.callout-#{$name}.callout { border-left-color: $col; }
+  div.callout-#{$name}.callout-style-default > .callout-header { background-color: $tint; }
+  div.callout-#{$name} .callout-icon::before { filter: none; }
+  div.callout-#{$name}.callout-style-simple { background-color: $tint; }
+}

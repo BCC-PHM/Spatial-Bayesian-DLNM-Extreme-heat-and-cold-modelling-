@@ -1,0 +1,936 @@
+---
+title: "Spatial Bayesian Distributed Lag Non-linear Modelling of Temperature-Related Mortality in Birmingham"
+author: "Chung Au-Yeung"
+date: today
+date-format: "DD MMM YYYY"
+bibliography: "references.bib"
+csl: csl/elsevier-vancouver.csl
+editor: visual
+execute:
+  echo: false
+  message: false
+  warning: false
+format:
+  bcc-html: default
+---
+
+```{r libraries/setup}
+#| output: false
+#| warning: false
+library(tidyverse)
+library(ggiraph)
+library(patchwork)
+library(sf)
+library(readr)
+library(readxl)
+library(here)
+library(scales)
+library(bcctheme)
+
+```
+
+## Introduction
+
+The aim of this study was to analyse the association between air temperature and all-cause mortality particularly for Birmingham and to demonstrate the application of spatial Bayesian distributed lag non-linear models (SB-DLNMs) for estimating temperature-mortality relationships at fine geographical level with limited data. Using Birmingham as a case study, this framework can be replicated by other local authorities or cities, both in UK and internationally, to guide their local public health policies.
+
+## Methods
+
+### Data
+
+Daily all-cause mortality data in Birmingham were extracted from the death register table that was stored in the Birmingham City Council SQL server. The dataset covered the period between 01/01/2005 and 31/12/2025 and and included the electoral ward of residence for each deceased individual. To restrict the analysis to Birmingham residents, only those associated with a valid Birmingham ward code were included in the analysis. To avoid bias in the assessment of temperature-related mortality, individuals whose underlying cause of death was COVID-19 (ICD-10 codes U07.1, U07.2) were removed to account for the inflated deaths during the pandemic period. Therefore, a total of 180,327 deaths during the study period were used for analysis..
+
+During the same study period, the daily maximum and minimum values of air temperature on 1 km grid across UK were obtained from the HadUK-Grid database, produced by the UK Meteorological Office. The UK-wide grid data were then spatially subset to Birmingham by cropping and masking the raster layer using the dissolved polygon to exclude all cells outside Birmingham. Daily ward-level minimum and maximum air temperature were calculated using the area-weighted average of the grid cells intersecting each ward polygon. Finally, the daily ward-level mean values of air temperature were derived from the average of the daily ward-level minimum and maximum air temperature.
+
+### Modelling approach
+
+This analysis adopted the extension of the Bayesian distributed lag non-linear models (DLNMs) to the spatial Bayesian DLNMs (SB-DLNMs) as demonstrated in recent methodological study [@sbdlnm_marcos2024]. For each day $d$ and ward $w$ in Birmingham, let $Y_{d,w}$ denote the observed number of deaths for all causes. The association between ambient air temperature and all-cause mortality was modelled using a Poisson likelihood with a log-link function:
+
+$$
+Y_{d,w} \sim \text{Poisson}(\lambda_{d,w})
+$$
+
+$$
+\log(\lambda_{d,w})=\alpha_{s(d,w)}+\sum_{c=1}^{n_c} \beta_{w,c}\, CB_{d,w,c}
+$$
+
+where $\alpha_{s(d,w)}$ denotes the stratum-specific intercepts under the use of case-crossover design, which is a methodology framework extensively used in environmental epidemiology [@casecrossover_2024]. In order to control for long-term trends, seasonality, and ward-specific time-invariant confounding, the data were stratified by ward, year, month and day of week, such that daily temperature and all-cause mortality in a given ward were compared exclusively with observations from the same ward on the same day of the week, within the same month and year. It has to be noted that strata with zero observed deaths were excluded from the model because they do not contribute to the likelihood and provide no information for parameter estimation; $CB_{d,w,c}$ is the cross-basis matrix that captures the non-linear relationship between temperature and mortality across a range of lags. Two separate spline basis functions were specified for the temperature and lag dimensions. With regards to the exposure-response space, cubic B-splines were selected with internal knots placing at the 10th, 75th and the 90th percentiles of the temperature range. For the lag-response space, natural cubic splines were used with three internal knots placed at equally spaced values on the log scale, including an intercept. A lag window of 0-21 days was chosen to capture the delayed effect of cold and the short-term mortality displacement from the heat effect. The specification for both basis functions followed previously established practice in the literature [@gasparrini2022smallarea].
+
+$$
+\beta_{w,c} = \beta_c + \beta^{*}_{w,c}
+$$
+
+$$
+\beta^{*}_{w,c}=\frac{1}{\sqrt{\tau_c}}\left(\sqrt{1-\phi_c}\, v_{w,c}+\sqrt{\phi_c}\, u_{w,c}\right)
+$$
+
+Modelling for a single local authority at fine geographical level often results in extremely high variance and unreliable estimates. To mitigate this, it is assumed that neighbouring wards share similar characteristics that contribute to their underlying mortality risk. The spatial dependency was modelled within a Bayesian hierarchical framework using the Besag–York–Mollié 2 model (BYM2), by incorporating the spatial structure directly into the ward-specific cross-basis coefficients $\beta_{w,c}$ of the cross-basis matrix $CB$. To define spatial neighbourhood, queen contiguity was specified such that wards were considered as adjacent if they shared either a long border or just a single corner. Specifically, each coefficient $\beta _{w,c}$ is modelled as the sum of the global fixed effect ($\beta_{c}$) for the entire region, and a ward-specific random effect $\beta^{*}_{w,c}$ which accounts for the spatial dependence between neighbouring wards. The spatial neighbourhood structure under BYM2 model can be separated into scaled structured ($u_{w,c}$ ) and unstructured ($v_{2,c}$) spatial components. The proportional contribution of these components is controlled by a mixing parameter $\phi_{c}$, and the overall variability of the spatial effect is controlled by a precision parameter $\tau_{c}$ [@moraga2023spatial].
+
+### Prior specification
+
+Since this analysis was conducted within a Bayesian framework, prior distributions of all model parameters were specified as follows:
+
+$$
+\alpha_{s(d,w)} \sim \mathcal{N}(0,\; 10^{4})
+$$ $$
+\beta_c \sim \mathcal{N}(0,\; 10^6)
+$$
+
+$$
+\Pr\!\left(\frac{1}{\sqrt{\tau_c}} > 1\right) = 0.01
+$$
+
+$$
+\Pr\!\left(\phi_c < 0.5\right) = \tfrac{2}{3},\qquad0 \le \phi_c \le 1
+$$
+
+It is assumed that the strata specific intercept ($\alpha_{s(d,w)}$) and the global fixed effect ($\beta_{c}$) follow the weakly informative Gaussian priors. The prior specification for the scaled structured and unstructured spatial components of the BYM2 model uses the Penalised Complexity (PC) priors which were introduced as a interpretable and meaningful specification [@simpson2015penalisingmodelcomponentcomplexity]. For the precision parameter $\tau_{c}$ , the PC prior was set such that $\Pr\!\left(\frac{1}{\sqrt{\tau_c}} > 1\right) = 0.01$, implying that substantial there is only 1% prior probability of large residual variation in temperature-mortality risk across wards. For the mixing parameter $\phi_{c}$, the PC prior was set such that $\Pr\!\left(\phi_c < 0.5\right) = \tfrac{2}{3}$, reflecting a prior specification that there is a 67% probability of less than half of the residual variation in temperature-mortality risk across wards is spatially structured. This means that unstructured, ward-specific random noise accounts for a greater proportion of the variability. These conservative priors were adopted because BYM2 model naturally shrinks towards $\phi_{c}=0$ unless the data provide strong evidence of genuine spatial dependency [@riebler2016intuitivebayesianspatialmodel].
+
+### Statistical analysis
+
+The associations between temperature and mortality across all wards were estimated with a single-stage approach with the SB-DLNM. The model was fitted using the R-INLA (Integrated Nested Laplace Approximation) package which provides computational efficiency in execution times than using Markov Chained Monte Carlo method from other R packages. Given the high dimensionality of the model induced by the cross-basis matrix and ward-specific spatial effects, inference was conducted using empirical Bayes strategy instead of the full Laplace approximation.
+
+The output of the SB-DLNMs were obtained by drawing 1,000 independent samples from the posterior distributions of the model parameters for each ward. These posterior samples were then used to derive the ward-specific temperature-mortality associations by aggregating the coefficients of the global fixed effect for the entire region and the ward-specific cross-basis coefficients. In order to calculate ward-specific relative risk (RR) curves for each ward, grids of ward-specific temperatures were constructed using the observed minimum and maximum temperatures within each ward. These grids were then used to generate prediction cross-basis matrices for each ward. These matrices were then combined with the corresponding prediction cross-basis matrices for each ward to reconstruct the cumulative temperature–mortality association across the observed temperature range. Initially, the reference point of the temperature was selected at the 90th percentile which is around 17 to 18 °C that matches the nationwide reference under UK context.
+
+To obtain the minimum mortality temperature (MMT) and the MMT distribution, the 1,000 RR curves calculated from the previous step were re-centred by finding their minimum RR for each ward. The search for the minimum RR on each curve was constrained within the 1st and the 99th percentiles of the ward-specific temperature grid. The constraint was justified because extreme temperatures at extreme tails of the distribution are rare, excluding them can provide more stable estimates, which is in line with previous studies [@tobias2017mmtuncertainty]. Once the minimum RR values were identified, the corresponding temperatures from the temperature grids were extracted and defined as the MMT. The posterior distribution of the MMT for each ward was the obtained by identifying the MMT across all posterior samples.
+
+Once ward-specific MMTs had been identified for each posterior RR curve, excess mortality attributable to heat and cold were then calculated using the backward attributable fraction (b-AF) framework [@gasparrini2014attributablerisk]. The posterior distributions of the cumulative temperature-mortality association across lags that were centred at ward-specific MMTs were reconstructed by combing the posterior samples of the cross basis coefficients. The cumulative log-relative risks were calculated by summing lag-specific contributions over the 21 lags and transformed into b-AF for each posterior draw for each ward. These b-AF(s) were the multiplied by the daily observed deaths to derive the attributable numbers (ANs) for each posterior draw for each ward. Daily temperatures that were above the MMT(s) were counted as cold-related and above as heat-related.The cold- and heat-related excess mortality were calculated by aggregating the ANs separately for cold and heat and by year. Finally, the annual cold- and heat-related excess mortality were obtained by averaging over the study period, and standardised to per 100,000 in population using the 2022 ward level population estimates.
+
+Uncertainty was quantified using posterior median and 95% credible interval (CrI) obtained from the posterior distributions. Unlike conventional frequentist hypothesis testing, Bayesian inference does not reply on p-values. Instead the evidence was addressed by calculating the exceedance probability, implying that the posterior probability that the estimated effect exceeded a specific reference value. There is no universally cut-offs on exceedance-probability threshold for defining evidence. Previous study used an exceedance probability of 0.8 or above to show evidence of elevated risk [@richardson2004interpreting]. This study adopted this threshold and further divided the thresholds into as some (0.8–0.9), strong (0.9–0.95) and very strong evidence(≥ 0.95) for more intuitive intepreataiton. All data processing was performed in R version 4.4.2. All statistical analyses were performed in R version 4.4.2. All data visualisations were performed in R version 4.4.2. The code is available [here](https://github.com/BCC-PHM/Spatial-Bayesian-DLNM-Extreme-heat-and-cold-modelling-).
+
+## Results
+
+```{r for figure 1}
+#| warning: false
+#| echo: false
+#| label: fig-1-rrneighbour
+#| fig-cap: "Ward-specific temperature–mortality exposure–response functions for an adjacent set of neighbouring wards in Birmingham, showing minimum mortality temperature (MMT), relative risks at the 1st (●) and 99th (▲) percentile temperatures, and 95% credible intervals (shaded ribbon)."
+#| fig-width: 10
+#| fig-height: 8
+
+real_plot_df = readRDS(here("output", "04_RR_MMT_plot_data.rds"))
+
+
+batch_data = subset(real_plot_df, Ward_name %in% c("Billesley", "Brandwood & King's Heath",
+                                                   "Druids Heath & Monyhull", "Hall Green North",
+                                                   "Hall Green South", "Highter's Heath"))
+
+
+
+#----------------------------------------------------
+#dynamic height, rows needed rounding up by 3
+#----------------------------------------------------
+n_wards = length(unique(batch_data$Ward_id))
+n_rows = ceiling(n_wards / 3)
+
+
+p = ggplot(batch_data, aes(Temp, y = RR_median)) +
+  geom_ribbon(aes(ymin = RR_LL, ymax = RR_UL), alpha = 0.2, fill = "#A092AA", colour = NA) +
+  geom_line(size = 0.8, colour = "#A092AA") +
+  geom_hline(yintercept = 1) +
+  geom_vline(data = batch_data, aes(xintercept = MMT), linetype = "dashed", size = 0.5, alpha = 0.5) +
+  geom_point(
+    data         = batch_data,
+    aes(x = -4.8, y = ifelse(Percentage == "1.0%", 5.78, 5.18), shape = Percentage),
+    size         = 2,
+    fill         = "#7F6588",
+    colour       = "black",
+    stroke       = 0.8,
+    inherit.aes  = FALSE
+  ) +
+  geom_point(data = batch_data, aes(shape = Percentage), size = 3, fill = "#7F6588", colour = "black", stroke = 0.8) +
+  geom_text(
+    data        = batch_data,
+    aes(x = -4.0, y = ifelse(Percentage == "1.0%", 5.8, 5.2), label = legend_label),
+    hjust       = 0,
+    size        = 3,
+    inherit.aes = FALSE,
+    fontface    = "bold"
+  ) +
+  geom_text(
+    data        = batch_data %>% group_by(Ward_name) %>% summarise(MMT = mean(MMT)),
+    aes(x = MMT, y = 3, label = paste0("MMT = ", sprintf("%.1f", MMT))),
+    angle       = 0,
+    vjust       = 0,
+    hjust       = 1.2,
+    size        = 3,
+    colour      = "black",
+    inherit.aes = FALSE
+  ) +
+  #let ggplot decide the layout now that we control the file size
+  facet_wrap(~ Ward_name, ncol = 3, scales = "free") +
+  scale_y_continuous(breaks = 0:6) +
+  scale_x_continuous(breaks = seq(-5, 30, 5)) +
+  coord_cartesian(ylim = c(0, 6), xlim = c(-5, 30)) +
+  scale_shape_manual(values = c("1.0%" = 21, "99.0%" = 24)) +
+  theme_bcc(base_size = 14,
+            gridline_x = F,
+            gridline_y = F) +
+  labs(x = "Temperature °C", y = "Relative Risk",
+       title = "Ward-specific temperature–mortality exposure–response functions for \nan adjacent set of neighbouring wards in Birmingham") +
+  theme(plot.margin = unit(c(0.5, 0.5, 0.5, 0.5), "cm"), legend.position = "none")
+
+     
+
+
+
+p
+
+```
+
+```{r data for figure 2}
+#| output: false
+#| warning: false
+
+real_plot_df = readRDS(here("output", "04_RR_MMT_plot_data.rds"))
+RR_prob_df = readRDS(here("output", "04_RR_exceedance_prob.rds"))
+ward_map = read_sf(here(
+  "data", "external", "boundaries",
+  "boundaries-wards-2022-birmingham",
+  "boundaries-wards-2022-birmingham.shp"
+))
+
+#############################################################################
+RR_99th_map = real_plot_df %>% 
+  filter(Percentage == "99.0%") %>% 
+  mutate(tooltip = paste0("<B>Ward Name:</B> ", Ward_name, "\n",
+                          "<B>Ward Code:</B> ", Ward_code, "\n",
+                          "<B>Median RR:</B> ", round(RR_median,2), "\n",
+                          "<B>Upper95CrI:</B> ", round(RR_UL,2), "\n",
+                          "<B>Lower95CrI:</B> ", round(RR_LL,2)))
+#############################################################################
+
+RR_1st_map = real_plot_df %>% 
+  filter(Percentage == "1.0%") %>% 
+  mutate(tooltip = paste0("<B>Ward Name:</B> ", Ward_name, "\n",
+                          "<B>Ward Code:</B> ", Ward_code, "\n",
+                          "<B>Median RR:</B> ", round(RR_median,2), "\n",
+                          "<B>Upper95CrI:</B> ", round(RR_UL,2), "\n",
+                          "<B>Lower95CrI:</B> ", round(RR_LL,2)))
+
+
+
+plot_sf = ward_map %>%
+  left_join(RR_prob_df, by = c("Ward_Code" = "Ward_code")) %>%
+  mutate(
+    RR_draws_P99 = as.numeric(RR_draws_P99),
+    RR_draws_P99_grey90 = if_else(RR_draws_P99 < 0.80, NA_real_, RR_draws_P99),
+    
+    evidence_99th = case_when(
+      is.na(RR_draws_P99)  ~ "Missing",
+      RR_draws_P99 >= 0.95 ~ "Very strong evidence (≥0.95)",
+      RR_draws_P99 >= 0.90 ~ "Strong evidence (0.90–0.95)",
+      RR_draws_P99 >= 0.80 ~ "Some evidence (0.80–0.90)",
+      TRUE                 ~ "No evidence (<0.80)"
+    ),
+    
+    tooltip_99th = paste0(
+      "<B>Ward Name:</B> ",Ward_Name, "\n",
+      "<B>Ward Code:</B> ", Ward_Code, "\n",
+      "<B>Pr(RR at P99)>1:</B> ", round(RR_draws_P99, 2),
+      "\n<B>Inference:</B> ", evidence_99th
+    ),
+    RR_draws_P1 = as.numeric(RR_draws_P1),
+    RR_draws_P1_grey90 = if_else(RR_draws_P1 < 0.80, NA_real_, RR_draws_P1),
+    evidence_P1 = case_when(
+      is.na(RR_draws_P1)  ~ "Missing",
+      RR_draws_P1 >= 0.95 ~ "Very strong evidence (≥0.95)",
+      RR_draws_P1 >= 0.90 ~ "Strong evidence (0.90–0.95)",
+      RR_draws_P1 >= 0.80 ~ "Some evidence (0.80–0.90)",
+      TRUE                 ~ "No evidence (<0.80)"
+    ),
+    tooltip_P1 = paste0(
+      "<B>Ward Name:</B> ",Ward_Name, "\n",
+      "<B>Ward Code:</B> ", Ward_Code, "\n",
+      "<B>Pr(RR at P1)>1:</B> ", round(RR_draws_P1, 3),
+      "\n<B>Inference:</B> ", evidence_P1
+    ))
+
+
+#############################################################################
+#custom css
+tooltip_css = "
+  background: rgba(255, 255, 255, 0.97);
+  color: #1f2937;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(17, 24, 39, 0.12);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
+  font-size: 16px;
+  line-height: 1.35;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+"
+
+hover_css = "
+  cursor: pointer;
+  stroke: #111827 ;    /* darker border */
+  stroke-width: 1.5px ;  /* thicker border */
+  opacity: 1 ;         /* keep fill the same */
+  transition: all 0.15s ease-out;
+"
+
+```
+
+@fig-1-rrneighbour shows the overall ward-specific cumulative relative risk curves for an adjacent set of neighbouring wards in Birmingham. It is observed that these RR curves show the usual J-shape with varying MMT but generally occur at a relatively warmer temperatures at around the 90th percentile temperatures. Elevated mortality risks in both cold and heat temperatures are observed across wards.
+
+@fig-rr-cold-maps and @fig-rr-heat-maps show the spatial distribution of the median RR at 1st and 99th percentile of the ward specific temperatures referenced to their own MMT. Perry Bar exhibits the highest RR at 1st percentile temperature at 1.81 (95% CrI: 1.30-2.49). In contrast, the RR values at 99th percentile are also elevated where ward Northfield shows the highest RR at 1.61 (95% CrI: 0.94–2.88). The cold-and heat- extreme map shows consistent elevated RR across wards, with similar RR values between adjacent neighbours, implying spatial clustering and vulnerability to lower and higher temperatures is not uniform across Birmingham. The exceedance probability that RR exceeds 1 at both the percentile temperatures were calculated. At 1st percentile temperature, all wards show strong evidence that the mortality risk is higher than the risk at ward's MMT whereas at 99th percentile, some wards show very strong, strong and some evidence and most of them show are slightly below 0.8 showing no evidence that the mortality risk is higher than the ward's MMT.
+
+::: {.panel-tabset style="color: gray;"}
+## Figure 2
+
+::: {#fig-rr-cold-maps}
+```{r figure 2}
+
+
+figure_RR_1st = ggplot(ward_map %>% left_join(RR_1st_map, by = c("Ward_Code" = "Ward_code" )))+
+  geom_sf_interactive(color = "white", aes(fill = RR_median, tooltip = tooltip,data_id = Ward_Code))+
+  scale_fill_distiller(palette = "Blues", direction = 1)+
+  labs(fill = "Relative Risk")+
+  ggtitle("Median Relative Risk of death at the 1st percentile of \nthe ward temperature distribution compared to the risk \nat the MMT of the median exposure response curve.")+
+  theme_void(base_size = 16) +
+  theme()
+
+
+figure_RR_1Prob = ggplot(plot_sf) +
+  geom_sf_interactive(aes(fill = RR_draws_P1_grey90, data_id = Ward_Code, tooltip = tooltip_P1),color = "white") +
+  scale_fill_distiller(
+    palette  = "Blues",
+    direction = 1,
+    na.value = "grey85",
+    limits   = c(0.80, 1.00),                 # keep the legend focused on 0.90–1.00
+    breaks   = c(0.80, 0.85, 0.90, 0.95, 1.00)
+  ) +
+  labs(fill = "Pr(RR at P1)") +
+  ggtitle("Exceedance probability that relative risk exceeds 1 \nat the 99th percentile temperature")+
+  theme_void(base_size = 16) +
+  theme()
+
+figure_RR_1st_prob = figure_RR_1st +figure_RR_1Prob
+
+#| label: fig-rr-maps
+#| fig-cap: "Ward-level spatial patterns in cumulative temperature–mortality relative risk at the 1st and 99th percentile temperatures (MMT-referenced)."
+#| fig-align: center
+#| fig-show: hold
+
+
+g = ggiraph::girafe(
+  ggobj = figure_RR_1st_prob,
+  width_svg = 14,
+  height_svg = 10,
+  options = list(
+    opts_hover(css = hover_css),
+    opts_tooltip(css = tooltip_css),
+    opts_hover_inv(css = "")))
+g
+
+```
+
+Ward-level spatial patterns in cumulative temperature–mortality relative risk at the 1st percentile temperatures (MMT-referenced) (left), and the corresponding exceedance probability that relative risk exceeds 1 (right).
+:::
+
+## Figure 3
+
+::: {#fig-rr-heat-maps}
+```{r figure 3}
+
+figure_RR_99th = ggplot(ward_map %>% left_join(RR_99th_map, by = c("Ward_Code" = "Ward_code" )))+
+  geom_sf_interactive(color = "white", aes(fill = RR_median, tooltip = tooltip,data_id = Ward_Code))+
+  scale_fill_distiller(palette = "Reds", direction = 1)+
+  labs(fill = "Relative Risk")+
+  ggtitle("Median Relative Risk of death at the 99th percentile of \nthe ward temperature distribution compared to the risk \nat the MMT of the median exposure response curve.")+
+  theme_void(base_size = 16) +
+  theme()
+
+
+
+figure_RR_99Prob = ggplot(plot_sf) +
+  geom_sf_interactive(aes(fill = RR_draws_P99_grey90, data_id = Ward_Code, tooltip = tooltip_99th),color = "white") +
+  scale_fill_distiller(
+    palette  = "Reds",
+    direction = 1,
+    na.value = "grey85",
+    limits   = c(0.80, 1.00),                 # keep the legend focused on 0.90–1.00
+    breaks   = c(0.80, 0.85, 0.90, 0.95, 1.00))+
+  labs(fill = "Pr(RR at P99)") +
+  ggtitle("Exceedance probability that relative risk exceeds 1 \nat the 99th percentile temperature")+
+  theme_void(base_size = 16) +
+  theme()
+
+
+figure_RR_99th_prob = figure_RR_99th +figure_RR_99Prob
+
+#| label: fig-rr-maps
+#| fig-cap: "Ward-level spatial patterns in cumulative temperature–mortality relative risk at the 1st and 99th percentile temperatures (MMT-referenced)."
+#| fig-align: center
+#| fig-show: hold
+
+
+girafe(
+  ggobj = figure_RR_99th_prob,
+  width_svg = 14,
+  height_svg = 10,
+  options = list(
+    opts_hover(css = hover_css),
+    opts_tooltip(css = tooltip_css),
+    opts_hover_inv(css = "")))
+
+
+
+
+```
+
+Ward-level spatial patterns in cumulative temperature–mortality relative risk at the 99th percentile temperatures (MMT-referenced) (left), and the corresponding exceedance probability that relative risk exceeds 1 (right).
+:::
+:::
+
+@fig-exceedance-heatmaps presents the exceedance probability of ward RR relative to the Birmingham mean RR, evaluated at each temperature percentile. The result suggest that there are evidence that Perry Bar, Kingstandingand and Handsworth Wood are mostly affected by cold exposure, whereas Northfield, Longbridge & West Heath, Perry Bar and Glebe Farm & Tile Cross and shows evidence in higher exceedance probability at upper temperature percentiles, suggesting some evidence in heat-related risk.
+
+::: {#fig-exceedance-heatmaps}
+```{r data for all exceedance prob}
+#| echo: false
+#| warning: false
+#| fig-height: 13  
+#| fig-width: 11  
+exceedance_prob_df = read_rds(here("output", "04_Exceedance_prob_RR_greater_Birmingham.rds"))
+
+exceedance_prob_df = exceedance_prob_df %>%
+  mutate(tile_id = row_number(),
+         evidence = case_when(is.na(p_exceed_bham)  ~ "Missing",
+                              p_exceed_bham >= 0.95 ~ "Very strong evidence (≥0.95)",
+                              p_exceed_bham >= 0.90 ~ "Strong evidence (0.90–0.95)",
+                              p_exceed_bham >=0.80 ~ "Some evidence (0.80-0.90)",
+                              TRUE                 ~ "No evidence (<0.80)"),
+         tooltip = paste0("<B>Ward name:</B> ",Ward_name, "\n",
+                          "<B>Temp Percentile:</B> ", Percentile, "\n",
+                          "<B>Pr(RR > Birmingham mean):</B> ", sprintf("%.3f", p_exceed_bham),"\n",
+                          "<B>Inference:</B> ",evidence))
+
+
+
+heatmap_plot = ggplot(exceedance_prob_df, aes(x = Percentile, y = Ward_name, fill = p_exceed_bham)) +
+  geom_tile_interactive(aes(data_id =tile_id, tooltip = tooltip)) +
+  scale_fill_distiller(
+    palette = "Greens",
+    direction = 1,
+    limits = c(0, 1),
+    oob = squish
+  ) +
+  scale_x_discrete(breaks = c("0.0%", "1.0%","10.0%","25.0%","50.0%","75.0%","90.0%","99.0%" ,"100.0%")) +
+  labs(
+    title = "Exceedance probability of ward RR is higher than the mean RR of \nBirmingham at every temperature percentile",
+    x = "Temperature percentile",
+    y = NULL,
+    fill = "Probability"
+  ) +
+  theme_minimal(base_size = 20) +
+  theme(
+    axis.text.x = element_text(angle = 45, vjust = 1, size = 11),
+    axis.text.y = element_text(size = 11)
+  )
+
+tooltip_css="
+  background: rgba(255, 255, 255, 0.97);
+  color: #1f2937;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(17, 24, 39, 0.12);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
+  font-size: 16px;
+  line-height: 1.35;
+  font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Arial, sans-serif;
+"
+
+hover_css = "
+  cursor: pointer;
+  stroke: #111827 ;    /* darker border */
+  stroke-width: 1.5px ;  /* thicker border */
+  opacity: 1 ;         /* keep fill the same */
+  transition: all 0.15s ease-out;
+"
+
+
+girafe(
+  ggobj = heatmap_plot,
+  width_svg = 14,
+  height_svg = 20,
+  options = list(
+    opts_hover(css = hover_css),
+    opts_tooltip(css = tooltip_css),
+    opts_hover_inv(css = "")))
+
+
+
+
+
+
+
+```
+
+Exceedance probability of ward RR relative to the Birmingham mean RR, evaluated at each temperature percentile
+:::
+
+Across Birmingham, the overall annual excess mortality attributable to cold exposure is 2,254 (95% CrI: 1363-4320) and the overall annual excess mortality attributable to heat exposure is 74 (95% CrI: 31-116). @fig-em-maps shows the posterior median annual cold and heat-related excess mortality per 100,000 population and the exceedance probability of excess mortality above the overall Birmingham median excess mortality (cold: 173.27 per 100,000; heat: 6.45 per 100,000). The exceedance probability suggests that Billesley and Bartley Green have strong evidence that their excess mortality attributable to cold exposure is higher than the overall Birmingham median excess mortality. Conversely, Bournville & Cotteridge and Glebe Farm & Tile Cross show evidence that their excess mortality attributable to heat exposure is higher than the overall Birmingham median excess mortality.
+
+```{r fir birmingham overall }
+#| echo: false
+#| warning: false
+#| output: false
+
+heat_annual_post = read_rds(here("output", "05_heat_annual_post_EM_ward.rds"))
+cold_annual_post = read_rds(here("output", "05_cold_annual_post_EM_ward.rds"))
+ward_EM_summary = read_rds(here("output", "05_heat_and_cold_related_EM_ward.rds"))
+ward_pop = read_excel(here("data", "external", "population", "sapewardstablefinal.xlsx"),
+                      sheet = "Mid-2022 Ward 2022", skip = 3)
+
+bham_excess_cold_list = vector("list", 1000)
+
+for (i in 1:1000){
+  #2. use a temporary name for the math (e.g., current_sum)
+  current_sum = sum(sapply(cold_annual_post, `[`, i))
+  #3. save it into the storage list
+  bham_excess_cold_list [[i]] = data.frame(draws = i, value = current_sum)
+}
+
+bham_excess_cold_df = bind_rows(bham_excess_cold_list)
+
+bham_excess_heat_list = vector("list", 1000)
+
+for (i in 1:1000){
+  #2. use a temporary name for the math (e.g., current_sum)
+  current_sum = sum(sapply(heat_annual_post, `[`, i))
+  #3. save it into the storage list
+  bham_excess_heat_list[[i]] = data.frame(draws = i, value = current_sum)
+}
+
+bham_excess_heat_df = bind_rows(bham_excess_heat_list)
+
+bham_pop = ward_pop %>% 
+  filter(`LAD 2022 Name` == "Birmingham") %>% 
+  pivot_longer(
+    cols      = c(-`LAD 2022 Name`, -`LAD 2022 Name`, -`Ward 2022 Code`, -`Ward 2022 Name`, -Total, -`LAD 2022 Code`),
+    names_to  = "age",
+    values_to = "count"
+  ) %>% 
+  group_by(`Ward 2022 Code`, `Ward 2022 Name`) %>% 
+  summarise(count = sum(count)) %>% 
+  rename(Ward_code = `Ward 2022 Code`, Ward_name = `Ward 2022 Name`) %>% 
+  pull(count) %>% 
+  sum()
+
+bham_mean_cold_EM = median(bham_excess_cold_df$value)/bham_pop*100000
+bham_mean_heat_EM = median(bham_excess_heat_df$value)/bham_pop*100000
+bham_mean_cold_EM
+bham_mean_heat_EM
+quantile(bham_excess_cold_df$value, 0.975)
+median(bham_excess_cold_df$value)
+quantile(bham_excess_cold_df$value, 0.025)
+
+quantile(bham_excess_heat_df$value, 0.975)
+median(bham_excess_heat_df$value)
+quantile(bham_excess_heat_df$value, 0.025)
+
+#==================================================
+X_heat_annual_post = read_rds(here("output", "05_X_heat_annual_post_EM_ward.rds"))
+X_cold_annual_post = read_rds(here("output", "05_X_cold_annual_post_EM_ward.rds"))
+
+bham_excess_Xcold_list = vector("list", 1000)
+
+for (i in 1:1000){
+  #2. use a temporary name for the math (e.g., current_sum)
+  current_sum = sum(sapply(X_cold_annual_post, `[`, i))
+  #3. save it into the storage list
+  bham_excess_Xcold_list [[i]] = data.frame(draws = i, value = current_sum)
+}
+
+bham_excess_Xcold_df = bind_rows(bham_excess_Xcold_list)
+
+bham_excess_Xheat_list = vector("list", 1000)
+
+for (i in 1:1000){
+  #2. use a temporary name for the math (e.g., current_sum)
+  current_sum = sum(sapply(X_heat_annual_post, `[`, i))
+  #3. save it into the storage list
+  bham_excess_Xheat_list [[i]] = data.frame(draws = i, value = current_sum)
+}
+
+bham_excess_Xheat_df = bind_rows(bham_excess_Xheat_list)
+
+bham_pop = ward_pop %>% 
+  filter(`LAD 2022 Name` == "Birmingham") %>% 
+  pivot_longer(
+    cols      = c(-`LAD 2022 Name`, -`LAD 2022 Name`, -`Ward 2022 Code`, -`Ward 2022 Name`, -Total, -`LAD 2022 Code`),
+    names_to  = "age",
+    values_to = "count"
+  ) %>% 
+  group_by(`Ward 2022 Code`, `Ward 2022 Name`) %>% 
+  summarise(count = sum(count)) %>% 
+  rename(Ward_code = `Ward 2022 Code`, Ward_name = `Ward 2022 Name`) %>% 
+  pull(count) %>% 
+  sum()
+
+bham_mean_Xcold_EM = median(bham_excess_Xcold_df$value)/bham_pop*100000
+bham_mean_Xheat_EM = median(bham_excess_Xheat_df$value)/bham_pop*100000
+bham_mean_Xcold_EM
+bham_mean_Xheat_EM
+quantile(bham_excess_Xcold_df$value, 0.975)
+median(bham_excess_Xcold_df$value)
+quantile(bham_excess_Xcold_df$value, 0.025)
+
+quantile(bham_excess_Xheat_df$value, 0.975)
+median(bham_excess_Xheat_df$value)
+quantile(bham_excess_Xheat_df$value, 0.025)
+```
+
+Across Birmingham, the overall annual excess mortality attributable to percentile temperature below 2.5th is 81 (95% CrI: 56-133) and the overall annual excess mortality attributable to percentile temperature above 97.5th is 62 (95% CrI: 41-115). @fig-x-em-maps shows the annual excess mortality per 100,000 for temperatures below 2.5th and above 97.5th percentiles, it demonstrates slightly different pattern especially for hotter temperatures. Elevated excess mortality is observed in Northfield, Yardley East show very strong evidence and Castle Vale, Sutton Wylde Green and Sutton Mere Green show strong evidence that the excess mortality attributable to hotter temperatures is higher than the overall Birmingham median excess mortality (heat: 4.76 per 100,000). For extreme cold temperatures, Kindstanding shows very strong evidence while Bilesley, Yardley East, Pype Hayesand Perry Bar also show strong evidence that excess mortality in colder temperatures is higher than the overall Birmingham median excess mortality (cold: 6.57 per 100,000).
+
+```{r data for figure 5}
+#| output: false
+#| warning: false
+ward_EM_summary = read_rds(here("output", "05_heat_and_cold_related_EM_ward.rds"))
+
+
+
+ward_pop = read_excel(here("data", "external", "population", "sapewardstablefinal.xlsx"),
+  sheet = "Mid-2022 Ward 2022",
+  skip  = 3
+)
+
+
+exceed_prob_EM_gt_bham_heatcold = read_rds(here("output", "05_exceed_prob_EM_gt_bham_heatcold.rds"))
+
+
+
+em_exceedance_plot_df = ward_map %>% 
+  left_join(exceed_prob_EM_gt_bham_heatcold, by = c("Ward_Code" = "ward22cd")) %>% 
+  mutate(evidence_cold = case_when(is.na(p_cold_gt_bham)  ~ "Missing",
+                                   p_cold_gt_bham  >= 0.95 ~ "Very strong evidence (≥0.95)",
+                                   p_cold_gt_bham  >= 0.90 ~ "Strong evidence (0.90–0.95)",
+                                   p_cold_gt_bham  >= 0.80 ~ "Some evidence (0.80–0.90)",
+                                   TRUE                 ~ "No evidence (<0.80)"),
+         evidence_heat = case_when(is.na(p_heat_gt_bham)  ~ "Missing",
+                                   p_heat_gt_bham  >= 0.95 ~ "Very strong evidence (≥0.95)",
+                                   p_heat_gt_bham  >= 0.90 ~ "Strong evidence (0.90–0.95)",
+                                   p_heat_gt_bham  >= 0.80 ~ "Some evidence (0.80–0.90)",
+                                   TRUE                 ~ "No evidence (<0.80)"),
+         
+         tooltip_cold = paste0(
+           "<B>Ward Name:</B> ",Ward_Name, "\n",
+           "<B>Ward Code:</B> ", Ward_Code, "\n",
+           "<B>Pr(EM > mean EM):</B> ", p_cold_gt_bham, "\n",
+           "<B>Inference:</B> ",evidence_cold),
+         tooltip_heat = paste0(
+           "<B>Ward Name:</B> ",Ward_Name, "\n",
+           "<B>Ward Code:</B> ", Ward_Code, "\n",
+           "<B>Pr(EM > mean EM):</B> ", p_heat_gt_bham, "\n",
+           "<B>Inference:</B> ",evidence_heat),
+         p_cold_gt_bham_grey80 = ifelse(p_cold_gt_bham<0.8, NA,p_cold_gt_bham),
+         p_heat_gt_bham_grey80 = ifelse(p_heat_gt_bham<0.8, NA,p_heat_gt_bham))
+
+```
+
+::: {.panel-tabset style="color: gray;"}
+## Figure 5
+
+::: {#fig-em-maps}
+```{r figure 5}
+#| echo: false
+#| warning: false
+# print widget
+
+
+ward_pop = ward_pop %>% 
+  filter(`LAD 2022 Name` == "Birmingham") %>% 
+  pivot_longer(cols = c(-`LAD 2022 Name`,-`LAD 2022 Name`,-`Ward 2022 Code`,-`Ward 2022 Name`,-Total,
+                        -`LAD 2022 Code`),
+               names_to = "age",
+               values_to = "count") %>% 
+  group_by(`Ward 2022 Code`,`Ward 2022 Name`) %>% 
+  summarise(count = sum(count),.groups = "drop") %>% 
+  rename(Ward_code = `Ward 2022 Code`,
+         Ward_name = `Ward 2022 Name`) %>% 
+  left_join(ward_EM_summary, by ="Ward_code") %>%  #join em summary with pop estimate
+  group_by(Ward_code, Ward_name, Ward_id) %>% 
+  #standardisation
+  mutate(heat_med = heat_med/count*100000,
+         heat_LL = heat_LL/count*100000,
+         heat_UL = heat_UL/count*100000,
+         cold_med = cold_med/count*100000,
+         cold_LL = cold_LL/count*100000,
+         cold_UL = cold_UL/count*100000,
+         #cold tootip
+         tooltip_cold  = paste0("<B>Ward Name:</B> ", Ward_name, "\n",
+                                "<B>Ward Code:</B> ", Ward_code, "\n",
+                                "<B>Median EM:</B> ", round(cold_med,2), "\n",
+                                "<B>Upper95CrI:</B> ", round(cold_UL,2), "\n",
+                                "<B>Lower95CrI:</B> ", round(cold_LL,2)),
+         #heat tooltip
+         tooltip_heat  = paste0("<B>Ward Name:</B> ", Ward_name, "\n",
+                                "<B>Ward Code:</B> ", Ward_code, "\n",
+                                "<B>Median EM:</B> ", round(heat_med,2), "\n",
+                                "<B>Upper95CrI:</B> ", round(heat_UL,2), "\n",
+                                "<B>Lower95CrI:</B> ", round(heat_LL,2)),
+  )
+
+
+
+
+
+
+
+figure_EM_cold =ggplot(ward_map %>% 
+  left_join(ward_pop, by = c("Ward_Code"="Ward_code")))+
+  geom_sf_interactive(color = "white", aes(fill=cold_med,data_id = Ward_Code, tooltip = tooltip_cold))+
+  scale_fill_distiller(palette = "Blues", direction = 1)+
+  labs(fill = "per 100,000")+
+  ggtitle("Posterior Median Estimates of Annual Cold-Related \nExcess Mortality")+
+  theme_void(base_size = 16) +
+  theme()
+
+
+
+
+
+figure_EM_heat = ggplot(ward_map %>% 
+         left_join(ward_pop, by = c("Ward_Code"="Ward_code")))+
+  geom_sf_interactive(color = "white", aes(fill=heat_med,data_id = Ward_Code, tooltip = tooltip_heat))+
+  scale_fill_distiller(palette = "Reds", direction = 1)+
+  labs(fill = "per 100,000")+
+  ggtitle("Posterior Median Estimates of Annual Heat-Related \nExcess Mortality")+
+  theme_void(base_size = 16) +
+  theme()
+
+
+
+
+
+figure_EM_prob_heat = ggplot(em_exceedance_plot_df )+
+  geom_sf_interactive(aes(fill = p_heat_gt_bham_grey80, tooltip = tooltip_heat, data_id = Ward_Code),color = "white")+
+  scale_fill_distiller(
+    palette  = "Reds",
+    direction = 1,
+    na.value = "grey85",
+    limits   = c(0.0,1.00)
+  )+
+  labs(fill = "Pr(EM>median EM)") +
+  ggtitle("Exceedance probability that heat-related excess mortality rate \nin the ward is higher than the overall Birmingham mean \nheat-realted excess mortality")+
+  theme_void(base_size = 16) +
+  theme()
+
+figure_EM_prob_cold = ggplot(em_exceedance_plot_df )+
+  geom_sf_interactive(aes(fill = p_cold_gt_bham_grey80,tooltip = tooltip_cold, data_id = Ward_Code),color = "white")+
+  scale_fill_distiller(
+    palette  = "Blues",
+    direction = 1,
+    na.value = "grey85",
+    limits   = c(0.0,1.00)
+  )+
+  labs(fill = "Pr(EM>median EM)") +
+  ggtitle("Exceedance probability that cold-related excess mortality rate \nin the ward is higher than the overall Birmingham mean \ncold-realted excess mortality")+
+  theme_void(base_size = 16) +
+  theme()
+
+
+
+figure_em_prob = (figure_EM_cold+figure_EM_prob_cold)/(figure_EM_heat+figure_EM_prob_heat)
+
+
+
+
+girafe(
+  ggobj = figure_em_prob,
+  width_svg = 14,
+  height_svg = 20,
+  options = list(
+    opts_hover(css = hover_css),
+    opts_tooltip(css = tooltip_css),
+    opts_hover_inv(css = "")))
+
+```
+
+Ward-level posterior median annual cold- and heat-related excess mortality rates in Birmingham (MMT-referenced), per 100,000 (left) and the Exceedance probability that the cold- and heat-related excess mortality rate in the ward is higher than the overall Birmingham mean cold- and heat-related mortality (right).
+:::
+
+## Figure 6
+
+::: {#fig-x-em-maps}
+```{r data for figure 6}
+#| echo: false
+#| warning: false
+# print widget
+ward_X_EM_summary = read_rds(here("output", "05_X_heat_and_cold_related_EM_ward.rds"))
+
+
+
+ward_pop = read_excel(here("data", "external", "population", "sapewardstablefinal.xlsx"),
+                      sheet = "Mid-2022 Ward 2022",
+                      skip  = 3
+)
+
+exceed_prob_EM_gt_bham_X_heatcold = read_rds(here("output","05_exceed_prob_EM_gt_bham_X_heatcold.rds"))
+
+
+
+
+
+em_exceedance_Xplot_df = ward_map %>% 
+  left_join(exceed_prob_EM_gt_bham_X_heatcold, by = c("Ward_Code" = "ward22cd")) %>% 
+  mutate(evidence_cold = case_when(is.na(p_Xcold_gt_bham)  ~ "Missing",
+                                   p_Xcold_gt_bham  >= 0.95 ~ "Very strong evidence (≥0.95)",
+                                   p_Xcold_gt_bham  >= 0.90 ~ "Strong evidence (0.90–0.95)",
+                                   p_Xcold_gt_bham  >= 0.80 ~ "Some evidence (0.80–0.90)",
+                                   TRUE                 ~ "No evidence (<0.80)"),
+         evidence_heat = case_when(is.na(p_Xheat_gt_bham)  ~ "Missing",
+                                   p_Xheat_gt_bham  >= 0.95 ~ "Very strong evidence (≥0.95)",
+                                   p_Xheat_gt_bham  >= 0.90 ~ "Strong evidence (0.90–0.95)",
+                                   p_Xheat_gt_bham  >= 0.80 ~ "Some evidence (0.80–0.90)",
+                                   TRUE                 ~ "No evidence (<0.80)"),
+         
+         tooltip_cold = paste0(
+           "<B>Ward Name:</B> ",Ward_Name, "\n",
+           "<B>Ward Code:</B> ", Ward_Code, "\n",
+           "<B>Pr(EM > mean EM):</B> ", p_Xcold_gt_bham, "\n",
+           "<B>Inference:</B> ",evidence_cold),
+         tooltip_heat = paste0(
+           "<B>Ward Name:</B> ",Ward_Name, "\n",
+           "<B>Ward Code:</B> ", Ward_Code, "\n",
+           "<B>Pr(EM > mean EM):</B> ", p_Xheat_gt_bham, "\n",
+           "<B>Inference:</B> ",evidence_heat),
+         p_Xcold_gt_bham_grey80 = ifelse(p_Xcold_gt_bham<0.8, NA,p_Xcold_gt_bham),
+         p_Xheat_gt_bham_grey80 = ifelse(p_Xheat_gt_bham<0.8, NA,p_Xheat_gt_bham)
+         
+         
+         
+         
+         )
+
+```
+
+```{r figure 6 }
+#| warning: false
+#| echo: false
+
+
+ward_pop =  ward_pop %>% 
+  filter(`LAD 2022 Name` == "Birmingham") %>% 
+  pivot_longer(cols = c(-`LAD 2022 Name`,-`LAD 2022 Name`,-`Ward 2022 Code`,-`Ward 2022 Name`,-Total,
+                        -`LAD 2022 Code`),
+               names_to = "age",
+               values_to = "count") %>% 
+  group_by(`Ward 2022 Code`,`Ward 2022 Name`) %>% 
+  summarise(count = sum(count), .groups = "drop") %>% 
+  rename(Ward_code = `Ward 2022 Code`,
+         Ward_name = `Ward 2022 Name`) %>% 
+  left_join(ward_X_EM_summary, by ="Ward_code") %>%  #join em summary with pop estimate
+  group_by(Ward_code, Ward_name, Ward_id) %>% 
+  #standardisation
+  mutate(heat_med = heat_med/count*100000,
+         heat_LL = heat_LL/count*100000,
+         heat_UL = heat_UL/count*100000,
+         cold_med = cold_med/count*100000,
+         cold_LL = cold_LL/count*100000,
+         cold_UL = cold_UL/count*100000,
+         #cold tootip
+         tooltip_cold  = paste0("<B>Ward Name:</B> ", Ward_name, "\n",
+                                "<B>Ward Code:</B> ", Ward_code, "\n",
+                                "<B>Median EM:</B> ", round(cold_med,2), "\n",
+                                "<B>Upper95CrI:</B> ", round(cold_UL,2), "\n",
+                                "<B>Lower95CrI:</B> ", round(cold_LL,2)),
+         #heat tooltip
+         tooltip_heat  = paste0("<B>Ward Name:</B> ", Ward_name, "\n",
+                                "<B>Ward Code:</B> ", Ward_code, "\n",
+                                "<B>Median EM:</B> ", round(heat_med,2), "\n",
+                                "<B>Upper95CrI:</B> ", round(heat_UL,2), "\n",
+                                "<B>Lower95CrI:</B> ", round(heat_LL,2))
+  )
+
+
+
+
+figure_EM_Xcold =ggplot(ward_map %>% 
+                    left_join(ward_pop, by = c("Ward_Code"="Ward_code")))+
+  geom_sf_interactive(color = "white", aes(fill=cold_med,data_id = Ward_Code, tooltip = tooltip_cold))+
+  scale_fill_distiller(palette = "Blues", direction = 1)+
+  labs(fill = "per 100,000")+
+  ggtitle("Posterior Median Estimates of Annual Excess \nMortality due to teperatures below 2.5th percentile")+
+  theme_void(base_size = 16) +
+  theme()
+
+
+
+
+
+figure_EM_Xheat = ggplot(ward_map %>% 
+                     left_join(ward_pop, by = c("Ward_Code"="Ward_code")))+
+  geom_sf_interactive(color = "white", aes(fill=heat_med,data_id = Ward_Code, tooltip = tooltip_heat))+
+  scale_fill_distiller(palette = "Reds", direction = 1)+
+  labs(fill = "per 100,000")+
+  ggtitle("Posterior Median Estimates of Annual Excess \nMortality due to teperatures above 97.5th percentile")+
+  theme_void(base_size = 16) +
+  theme()
+
+
+figure_EM_prob_Xheat = ggplot(em_exceedance_Xplot_df )+
+  geom_sf_interactive(aes(fill = p_Xheat_gt_bham_grey80, tooltip = tooltip_heat, data_id = Ward_Code), color = "white")+
+  scale_fill_distiller(
+    palette  = "Reds",
+    direction = 1,
+    na.value = "grey85",
+    limits   = c(0.0,1.00)
+  )+
+  labs(fill = "Pr(EM>mean EM)") +
+  ggtitle("Exceedance probability that excess mortality rate above 97.5th \npercentile in the ward is higher than the overall Birmingham mean \nheat-realted excess mortality")+
+  theme_void(base_size = 16) +
+  theme()
+
+
+
+
+figure_EM_prob_Xcold =
+ggplot(em_exceedance_Xplot_df )+
+  geom_sf_interactive(aes(fill = p_Xcold_gt_bham_grey80, tooltip = tooltip_cold, data_id = Ward_Code),color = "white")+
+  scale_fill_distiller(
+    palette  = "Blues",
+    direction = 1,
+    na.value = "grey85",
+    limits   = c(0.0,1.00)
+  )+
+  labs(fill = "Pr(EM>mean EM)") +
+  ggtitle("Exceedance probability that excess mortality rate below 2.5th \npercentile in the ward is higher than the overall Birmingham mean \nheat-realted excess mortality")+
+  theme_void(base_size = 16) +
+  theme()
+
+
+
+figure_em_prob_X = (figure_EM_Xcold+figure_EM_prob_Xcold)/(figure_EM_Xheat+figure_EM_prob_Xheat)
+
+
+
+
+girafe(
+  ggobj = figure_em_prob_X,
+  width_svg = 14,
+  height_svg = 20,
+  options = list(
+    opts_hover(css = hover_css),
+    opts_tooltip(css = tooltip_css),
+    opts_hover_inv(css = "")))
+
+
+
+
+```
+
+Ward-level posterior median annual excess mortality rates in Birmingham due to temperatures below 2.5th and above 97.5th percentile , per 100,000 and the Exceedance probability that the excess mortality rate below 2.5th and above 97.5th percentile temperature in the ward is higher than the overall Bimingham mean excess mortality below 2.5th and above 97.5th percentile temperate (right).
+:::
+:::
+
+## Discussion
+
+This study adopted the novel SB-DLNM for estimating the short-term health impact of non-optimal temperature for Birmingham at fine geographical level and obtained more stable estimates with the use of a single stage model that take into accounts of spatial dependences. Uncertainties associated with model parameters and epidemiological metrics were fully propagated within the Bayesian framework. This study also attempted to project the future excess mortality under different scenarios to provide a comprehensive assessment to inform and shape policies at local authority level.
+
+The results are broadly comparable with previous studies focusing on nation-wide temperature-mortality association. Almost all of the wards in Birmingham were estimated with MMT(s) that are very close to the range of "comfortable" temperatures that suggested and studied in UK. [@gasparrini2022smallarea; @ONS2023_climate_mortality_1988_2022]. The plots that showed excess mortality below temperatures at 2.5th and above 97.5th percentile displayed slightly different spatial patterns. compared to overall cold- and heat-related mortality. This is expected because the overall estimates capture mortality across all temperatures below or above the ward-specific MMT, while the more extreme-temperature estimates capture the tails of each side of the temperature distribution. As a result, for those wards that might have higher overall heat-related mortality might not necessarily also have higher burden during the more extreme temperatures. It has to be noted that under the UK climate, the 2.5th and 97.5th percentile of daily mean temperatures correspond to the tails of local temperature distribtuion and do not necessarily correspond to extreme conditions. Overall, the findings indicate the MMT in Birmingham lies at a higher percentile of the observed temperature, implying that larger proportion of days fall below the MMT and count as cold-related burden. Therefore, public health policy should focus on preventing the deaths under non-optimal cold temperatures which still dominate the absolute count of burden.
+
+This study has some limitations and the audiences must interpret with caution. Firstly, the estimated CrI(s) were wide for both the observed-period estimates, reflecting uncertainty in temperature-mortality relationship with limited data. Fortunately with the use of SB-DLNM, posterior medians are comparatively stable. As a result, the estimates should be interpreted as plausible ranges and broad patterns which are useful for identifying spatial heterogeneity rather than precise estimates for individual wards. Secondly, this study did not use directly age-standardisation but instead the unadjusted crude rate which might underestimate or overestimate the excess mortality rate. Further separate estimation of temperature-mortality relationship for each age group would substantially increase data sparsity, leading to more unstable estimates. Thirdly, exceedance probabilities represent a relative comparison to Birmingham overall median excess mortality rates. Therefore, a ward with lower exceedance probability does not indicate a lower absolute burden of temperature-related mortality within the ward. Fourthly, ward-level daily mean temperature does not represent individual exposure. Actual exposure depends on indoor conditions, housing quality and individual time-activity patterns in which gridded-climate data can not fully capture.
+
+## Conclusion
+
+In conclusion, the study provides a practical example of utilitsing SB-DLNM with limited data to obtain at least a broad picture of the temperature-related mortality within a local authority with fine geographical level. By producing ward-level estimates and projections with quantified uncertainty, the approach offers a "broad" idea of where the heat and cold burdens most likely to be concentrated, supporting tailored policy making. More importantly, other local authority in the UK can also implement the same method to guide their local policy without relying on large scale national study which updates rarely. Finally, it should also be noted that local authorities that have access to deaths data further back in years will be able to obtain the temperature-mortality associations with greater precision, leading to more robust estimates and greater certainty.
