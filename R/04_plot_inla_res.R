@@ -214,14 +214,17 @@ for (w in 1:69) {
   #----------------------------------------------------
   logRR_med = apply(rr, 1, median, na.rm = TRUE)
   
-  i_mmt     = which.min(logRR_med)
+  valid_idx = which(percentiles >= 0.01 & percentiles <= 0.99)
+  
+  i_mmt     = valid_idx[which.min(logRR_med[valid_idx])]
   mmt_value = x_temp[[i]][i_mmt]
   min_risk  = exp(logRR_med[i_mmt])
   
   #----------------------------------------------------
   #centre all draws at the ward mmt
   #----------------------------------------------------
-  mmt_position_draws = apply(rr, 2, which.min)
+  mmt_position_draws = apply(rr[valid_idx, , drop = FALSE], 2, which.min)
+  mmt_position_draws = valid_idx[mmt_position_draws]
   
   mmt_draws_by_ward[[i]] = tibble(
     nsim      = seq_len(ncol(rr)),
@@ -230,7 +233,7 @@ for (w in 1:69) {
     Ward_id   = i
   )
   
-  rr_cen_mmt = apply(rr, 2, function(x) x - x[i_mmt])
+  rr_cen_mmt = sapply(seq_len(ncol(rr)), function(j) rr[, j] - rr[mmt_position_draws[j], j])
   
   #keep it as logrr
   log_rr_mmt_centered[[i]] = rr_cen_mmt

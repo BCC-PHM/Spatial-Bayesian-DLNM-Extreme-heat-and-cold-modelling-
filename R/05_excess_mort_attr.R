@@ -197,7 +197,7 @@ for (i in 1:69) {
 #======================================================
 # save final result
 #======================================================
-write_rds( ward_specific_cumul_RR,"output/05_ward_specific_cumul_RR.rds")
+# write_rds( ward_specific_cumul_RR,"output/05_ward_specific_cumul_RR.rds")
 
 cat("\n==============================================\n")
 cat("ALL WARDS COMPLETED SUCCESSFULLY\n")
@@ -245,7 +245,7 @@ for (i in 1:69){
 
 write_rds(excess_mortality_daily_by_ward, "output/05_excess_mortality_daily_by_ward.rds")
 
-# excess_mortality_daily_by_ward = readRDS("output/05_excess_mortality_daily_by_ward.rds")
+excess_mortality_daily_by_ward = readRDS("output/05_excess_mortality_daily_by_ward.rds")
 ##########################################################
 #==================================================================
 #total excess deaths for ward 
