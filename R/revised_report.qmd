@@ -468,8 +468,7 @@ girafe(
 Exceedance probability of ward RR relative to the Birmingham mean RR, evaluated at each temperature percentile
 :::
 
-Across Birmingham, the overall annual excess mortality attributable to cold exposure is 2,254 (95% CrI: 1363-4320) and the overall annual excess mortality attributable to heat exposure is 74 (95% CrI: 31-116). @fig-em-maps shows the posterior median annual cold and heat-related excess mortality per 100,000 population and the exceedance probability of excess mortality above the overall Birmingham median excess mortality (cold: 173.27 per 100,000; heat: 6.45 per 100,000). The exceedance probability suggests that Billesley and Bartley Green have strong evidence that their excess mortality attributable to cold exposure is higher than the overall Birmingham median excess mortality. Conversely, Bournville & Cotteridge and Glebe Farm & Tile Cross show evidence that their excess mortality attributable to heat exposure is higher than the overall Birmingham median excess mortality.
-
+Across Birmingham, the overall annual excess mortality attributable to cold exposure is 1,458 (95% CrI: 1118-1829) and the overall annual excess mortality attributable to heat exposure is 92 (95% CrI: 63-132). @fig-em-maps shows the posterior median annual cold and heat-related excess mortality per 100,000 population and the exceedance probability of excess mortality above the overall Birmingham median excess mortality (cold: 126.00 per 100,000; heat: 8.00 per 100,000). The exceedance probability suggests that Billesley, Bromford & Hodge Hill and Sutton Walmley & Minworth show strong evidence. Conversely, only Northfield shows very strong evidence, with Glebe Farm & Tile Cross and Bournville & Cotteridge showing strong evidence. Most wards show no clear evidence of a rate above the city median for either exposure. 
 ```{r fir birmingham overall }
 #| echo: false
 #| warning: false
@@ -580,7 +579,7 @@ median(bham_excess_Xheat_df$value)
 quantile(bham_excess_Xheat_df$value, 0.025)
 ```
 
-Across Birmingham, the overall annual excess mortality attributable to percentile temperature below 2.5th is 81 (95% CrI: 56-133) and the overall annual excess mortality attributable to percentile temperature above 97.5th is 62 (95% CrI: 41-115). @fig-x-em-maps shows the annual excess mortality per 100,000 for temperatures below 2.5th and above 97.5th percentiles, it demonstrates slightly different pattern especially for hotter temperatures. Elevated excess mortality is observed in Northfield, Yardley East show very strong evidence and Castle Vale, Sutton Wylde Green and Sutton Mere Green show strong evidence that the excess mortality attributable to hotter temperatures is higher than the overall Birmingham median excess mortality (heat: 4.76 per 100,000). For extreme cold temperatures, Kindstanding shows very strong evidence while Bilesley, Yardley East, Pype Hayesand Perry Bar also show strong evidence that excess mortality in colder temperatures is higher than the overall Birmingham median excess mortality (cold: 6.57 per 100,000).
+Across Birmingham, the overall annual excess mortality attributable to percentile temperature below 2.5th is 62 (95% CrI: 49-76) and the overall annual excess mortality attributable to percentile temperature above 97.5th is 41 (95% CrI: 35-49). @fig-x-em-maps shows the annual excess mortality per 100,000 for temperatures below 2.5th and above 97.5th percentiles, it demonstrates slightly different pattern especially for hotter temperatures. Yardley East has the highest rate (7.8 per 100,000, 95% CrI 4.3–13.9) and the strongest evidence of being above the city median (Pr = 0.995). Northfield, Sutton Mere Green, Sutton Wylde Green and Castle Vale also show very strong evidence that the excess mortality attributable to hotter temperatures is higher than the overall Birmingham median excess mortality (heat: 3.58 per 100,000). For colder temperatures, Kingstanding (11.8 per 100,000, 95% CrI 6.0–16.3) shows very strong evidence that it is above the Birmingham median (Pr = 0.98).  Billesley and Perry Barr also show strong evidence, and several wards in the north and south show some evidence that excess mortality in colder temperatures is higher than the overall Birmingham median excess mortality (cold: 5.37 per 100,000).
 
 ```{r data for figure 5}
 #| output: false
@@ -597,7 +596,7 @@ ward_pop = read_excel(here("data", "external", "population", "sapewardstablefina
 
 exceed_prob_EM_gt_bham_heatcold = read_rds(here("output", "05_exceed_prob_EM_gt_bham_heatcold.rds"))
 
-
+evidence_levels = c("Very strong evidence (≥0.95)", "Strong evidence (0.90–0.95)", "Some evidence (0.80–0.90)", "No evidence (<0.80)")
 
 em_exceedance_plot_df = ward_map %>% 
   left_join(exceed_prob_EM_gt_bham_heatcold, by = c("Ward_Code" = "ward22cd")) %>% 
@@ -623,7 +622,9 @@ em_exceedance_plot_df = ward_map %>%
            "<B>Pr(EM > mean EM):</B> ", p_heat_gt_bham, "\n",
            "<B>Inference:</B> ",evidence_heat),
          p_cold_gt_bham_grey80 = ifelse(p_cold_gt_bham<0.8, NA,p_cold_gt_bham),
-         p_heat_gt_bham_grey80 = ifelse(p_heat_gt_bham<0.8, NA,p_heat_gt_bham))
+         p_heat_gt_bham_grey80 = ifelse(p_heat_gt_bham<0.8, NA,p_heat_gt_bham),
+         evidence_cold = factor(evidence_cold, levels = evidence_levels),
+         evidence_heat = factor(evidence_heat, levels = evidence_levels))
 
 ```
 
@@ -700,15 +701,13 @@ figure_EM_heat = ggplot(ward_map %>%
 
 
 
-
-
 figure_EM_prob_heat = ggplot(em_exceedance_plot_df )+
-  geom_sf_interactive(aes(fill = p_heat_gt_bham_grey80, tooltip = tooltip_heat, data_id = Ward_Code),color = "white")+
-  scale_fill_distiller(
-    palette  = "Reds",
-    direction = 1,
-    na.value = "grey85",
-    limits   = c(0.0,1.00)
+  geom_sf_interactive(aes(fill = evidence_heat, tooltip = tooltip_heat, data_id = Ward_Code),color = "white")+
+  scale_fill_manual(
+    values = c("Very strong evidence (≥0.95)"="#a50f15", 
+               "Strong evidence (0.90–0.95)" ="#ef3b2c", 
+               "Some evidence (0.80–0.90)" = "#fc9272", 
+               "No evidence (<0.80)"="grey85")
   )+
   labs(fill = "Pr(EM>median EM)") +
   ggtitle("Exceedance probability that heat-related excess mortality rate \nin the ward is higher than the overall Birmingham mean \nheat-realted excess mortality")+
@@ -716,17 +715,18 @@ figure_EM_prob_heat = ggplot(em_exceedance_plot_df )+
   theme()
 
 figure_EM_prob_cold = ggplot(em_exceedance_plot_df )+
-  geom_sf_interactive(aes(fill = p_cold_gt_bham_grey80,tooltip = tooltip_cold, data_id = Ward_Code),color = "white")+
-  scale_fill_distiller(
-    palette  = "Blues",
-    direction = 1,
-    na.value = "grey85",
-    limits   = c(0.0,1.00)
+  geom_sf_interactive(aes(fill = evidence_cold,tooltip = tooltip_cold, data_id = Ward_Code),color = "white")+
+  scale_fill_manual(
+    values = c("Very strong evidence (≥0.95)"="#08519c", 
+               "Strong evidence (0.90–0.95)" ="#4292c6", 
+               "Some evidence (0.80–0.90)" = "#9ecae1", 
+               "No evidence (<0.80)"="grey85")
   )+
   labs(fill = "Pr(EM>median EM)") +
   ggtitle("Exceedance probability that cold-related excess mortality rate \nin the ward is higher than the overall Birmingham mean \ncold-realted excess mortality")+
   theme_void(base_size = 16) +
   theme()
+
 
 
 
@@ -770,15 +770,16 @@ exceed_prob_EM_gt_bham_X_heatcold = read_rds(here("output","05_exceed_prob_EM_gt
 
 
 
+evidence_levels = c("Very strong evidence (≥0.95)", "Strong evidence (0.90–0.95)", "Some evidence (0.80–0.90)", "No evidence (<0.80)")
 
 em_exceedance_Xplot_df = ward_map %>% 
   left_join(exceed_prob_EM_gt_bham_X_heatcold, by = c("Ward_Code" = "ward22cd")) %>% 
-  mutate(evidence_cold = case_when(is.na(p_Xcold_gt_bham)  ~ "Missing",
+  mutate(evidence_Xcold = case_when(is.na(p_Xcold_gt_bham)  ~ "Missing",
                                    p_Xcold_gt_bham  >= 0.95 ~ "Very strong evidence (≥0.95)",
                                    p_Xcold_gt_bham  >= 0.90 ~ "Strong evidence (0.90–0.95)",
                                    p_Xcold_gt_bham  >= 0.80 ~ "Some evidence (0.80–0.90)",
                                    TRUE                 ~ "No evidence (<0.80)"),
-         evidence_heat = case_when(is.na(p_Xheat_gt_bham)  ~ "Missing",
+         evidence_Xheat = case_when(is.na(p_Xheat_gt_bham)  ~ "Missing",
                                    p_Xheat_gt_bham  >= 0.95 ~ "Very strong evidence (≥0.95)",
                                    p_Xheat_gt_bham  >= 0.90 ~ "Strong evidence (0.90–0.95)",
                                    p_Xheat_gt_bham  >= 0.80 ~ "Some evidence (0.80–0.90)",
@@ -788,19 +789,21 @@ em_exceedance_Xplot_df = ward_map %>%
            "<B>Ward Name:</B> ",Ward_Name, "\n",
            "<B>Ward Code:</B> ", Ward_Code, "\n",
            "<B>Pr(EM > mean EM):</B> ", p_Xcold_gt_bham, "\n",
-           "<B>Inference:</B> ",evidence_cold),
+           "<B>Inference:</B> ",evidence_Xcold),
          tooltip_heat = paste0(
            "<B>Ward Name:</B> ",Ward_Name, "\n",
            "<B>Ward Code:</B> ", Ward_Code, "\n",
            "<B>Pr(EM > mean EM):</B> ", p_Xheat_gt_bham, "\n",
-           "<B>Inference:</B> ",evidence_heat),
+           "<B>Inference:</B> ",evidence_Xheat),
          p_Xcold_gt_bham_grey80 = ifelse(p_Xcold_gt_bham<0.8, NA,p_Xcold_gt_bham),
-         p_Xheat_gt_bham_grey80 = ifelse(p_Xheat_gt_bham<0.8, NA,p_Xheat_gt_bham)
+         p_Xheat_gt_bham_grey80 = ifelse(p_Xheat_gt_bham<0.8, NA,p_Xheat_gt_bham),
+          evidence_Xcold = factor(evidence_Xcold, levels = evidence_levels),
+         evidence_Xheat = factor(evidence_Xheat, levels = evidence_levels))
          
          
          
          
-         )
+         
 
 ```
 
@@ -869,12 +872,12 @@ figure_EM_Xheat = ggplot(ward_map %>%
 
 
 figure_EM_prob_Xheat = ggplot(em_exceedance_Xplot_df )+
-  geom_sf_interactive(aes(fill = p_Xheat_gt_bham_grey80, tooltip = tooltip_heat, data_id = Ward_Code), color = "white")+
-  scale_fill_distiller(
-    palette  = "Reds",
-    direction = 1,
-    na.value = "grey85",
-    limits   = c(0.0,1.00)
+  geom_sf_interactive(aes(fill = evidence_Xheat, tooltip = tooltip_heat, data_id = Ward_Code), color = "white")+
+ scale_fill_manual(
+    values = c("Very strong evidence (≥0.95)"="#a50f15", 
+               "Strong evidence (0.90–0.95)" ="#ef3b2c", 
+               "Some evidence (0.80–0.90)" = "#fc9272", 
+               "No evidence (<0.80)"="grey85")
   )+
   labs(fill = "Pr(EM>mean EM)") +
   ggtitle("Exceedance probability that excess mortality rate above 97.5th \npercentile in the ward is higher than the overall Birmingham mean \nheat-realted excess mortality")+
@@ -886,12 +889,12 @@ figure_EM_prob_Xheat = ggplot(em_exceedance_Xplot_df )+
 
 figure_EM_prob_Xcold =
 ggplot(em_exceedance_Xplot_df )+
-  geom_sf_interactive(aes(fill = p_Xcold_gt_bham_grey80, tooltip = tooltip_cold, data_id = Ward_Code),color = "white")+
-  scale_fill_distiller(
-    palette  = "Blues",
-    direction = 1,
-    na.value = "grey85",
-    limits   = c(0.0,1.00)
+  geom_sf_interactive(aes(fill = evidence_Xcold, tooltip = tooltip_cold, data_id = Ward_Code),color = "white")+
+   scale_fill_manual(
+    values = c("Very strong evidence (≥0.95)"="#08519c", 
+               "Strong evidence (0.90–0.95)" ="#4292c6", 
+               "Some evidence (0.80–0.90)" = "#9ecae1", 
+               "No evidence (<0.80)"="grey85")
   )+
   labs(fill = "Pr(EM>mean EM)") +
   ggtitle("Exceedance probability that excess mortality rate below 2.5th \npercentile in the ward is higher than the overall Birmingham mean \nheat-realted excess mortality")+
