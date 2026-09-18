@@ -95,7 +95,7 @@ To obtain the minimum mortality temperature (MMT) and the MMT distribution, the 
 
 Once ward-specific MMTs had been identified for each posterior RR curve, excess mortality attributable to heat and cold were then calculated using the backward attributable fraction (b-AF) framework [@gasparrini2014attributablerisk]. The posterior distributions of the cumulative temperature-mortality association across lags that were centred at ward-specific MMTs were reconstructed by combing the posterior samples of the cross basis coefficients. The cumulative log-relative risks were calculated by summing lag-specific contributions over the 21 lags and transformed into b-AF for each posterior draw for each ward. These b-AF(s) were the multiplied by the daily observed deaths to derive the attributable numbers (ANs) for each posterior draw for each ward. Daily temperatures that were above the MMT(s) were counted as cold-related and above as heat-related.The cold- and heat-related excess mortality were calculated by aggregating the ANs separately for cold and heat and by year. Finally, the annual cold- and heat-related excess mortality were obtained by averaging over the study period, and standardised to per 100,000 in population using the 2022 ward level population estimates.
 
-Uncertainty was quantified using posterior median and 95% credible interval (CrI) obtained from the posterior distributions. Unlike conventional frequentist hypothesis testing, Bayesian inference does not reply on p-values. Instead the evidence was addressed by calculating the exceedance probability, implying that the posterior probability that the estimated effect exceeded a specific reference value. There is no universally cut-offs on exceedance-probability threshold for defining evidence. Previous study used an exceedance probability of 0.8 or above to show evidence of elevated risk [@richardson2004interpreting]. This study adopted this threshold and further divided the thresholds into as some (0.8–0.9), strong (0.9–0.95) and very strong evidence(≥ 0.95) for more intuitive intepreataiton. All data processing was performed in R version 4.4.2. All statistical analyses were performed in R version 4.4.2. All data visualisations were performed in R version 4.4.2. The code is available [here](https://github.com/BCC-PHM/Spatial-Bayesian-DLNM-Extreme-heat-and-cold-modelling-).
+Uncertainty was quantified using posterior median and 95% credible interval (CrI) obtained from the posterior distributions. Unlike conventional frequentist hypothesis testing, Bayesian inference does not reply on p-values. Instead the evidence was addressed by calculating the exceedance probability, implying that the posterior probability that the estimated effect exceeded a specific reference value. There is no universally cut-offs on exceedance-probability threshold for defining evidence. Previous study used an exceedance probability of 0.8 or above to show evidence of elevated risk [@richardson2004interpreting]. This study adopted this threshold and further divided the thresholds into as some (0.8–0.9), strong (0.9–0.95) and very strong evidence(≥ 0.95) for more intuitive interpretation. All data processing was performed in R version 4.4.2. All statistical analyses were performed in R version 4.4.2. All data visualisations were performed in R version 4.4.2. The code is available [here](https://github.com/BCC-PHM/Spatial-Bayesian-DLNM-Extreme-heat-and-cold-modelling-).
 
 ## Results
 
@@ -468,7 +468,8 @@ girafe(
 Exceedance probability of ward RR relative to the Birmingham mean RR, evaluated at each temperature percentile
 :::
 
-Across Birmingham, the overall annual excess mortality attributable to cold exposure is 1,458 (95% CrI: 1118-1829) and the overall annual excess mortality attributable to heat exposure is 92 (95% CrI: 63-132). @fig-em-maps shows the posterior median annual cold and heat-related excess mortality per 100,000 population and the exceedance probability of excess mortality above the overall Birmingham median excess mortality (cold: 126.00 per 100,000; heat: 8.00 per 100,000). The exceedance probability suggests that Billesley, Bromford & Hodge Hill and Sutton Walmley & Minworth show strong evidence. Conversely, only Northfield shows very strong evidence, with Glebe Farm & Tile Cross and Bournville & Cotteridge showing strong evidence. Most wards show no clear evidence of a rate above the city median for either exposure. 
+Across Birmingham, the overall annual excess mortality attributable to cold exposure is 1,458 (95% CrI: 1118-1829) and the overall annual excess mortality attributable to heat exposure is 92 (95% CrI: 63-132). @fig-em-maps shows the posterior median annual cold and heat-related excess mortality per 100,000 population and the exceedance probability of excess mortality above the overall Birmingham median excess mortality (cold: 126.00 per 100,000; heat: 8.00 per 100,000). The exceedance probability suggests that Billesley, Bromford & Hodge Hill and Sutton Walmley & Minworth show strong evidence. Conversely, only Northfield shows very strong evidence, with Glebe Farm & Tile Cross and Bournville & Cotteridge showing strong evidence. Most wards show no clear evidence of a rate above the city median for either exposure.
+
 ```{r fir birmingham overall }
 #| echo: false
 #| warning: false
@@ -579,7 +580,7 @@ median(bham_excess_Xheat_df$value)
 quantile(bham_excess_Xheat_df$value, 0.025)
 ```
 
-Across Birmingham, the overall annual excess mortality attributable to percentile temperature below 2.5th is 62 (95% CrI: 49-76) and the overall annual excess mortality attributable to percentile temperature above 97.5th is 41 (95% CrI: 35-49). @fig-x-em-maps shows the annual excess mortality per 100,000 for temperatures below 2.5th and above 97.5th percentiles, it demonstrates slightly different pattern especially for hotter temperatures. Yardley East has the highest rate (7.8 per 100,000, 95% CrI 4.3–13.9) and the strongest evidence of being above the city median (Pr = 0.995). Northfield, Sutton Mere Green, Sutton Wylde Green and Castle Vale also show very strong evidence that the excess mortality attributable to hotter temperatures is higher than the overall Birmingham median excess mortality (heat: 3.58 per 100,000). For colder temperatures, Kingstanding (11.8 per 100,000, 95% CrI 6.0–16.3) shows very strong evidence that it is above the Birmingham median (Pr = 0.98).  Billesley and Perry Barr also show strong evidence, and several wards in the north and south show some evidence that excess mortality in colder temperatures is higher than the overall Birmingham median excess mortality (cold: 5.37 per 100,000).
+Across Birmingham, the overall annual excess mortality attributable to percentile temperature below 2.5th is 62 (95% CrI: 49-76) and the overall annual excess mortality attributable to percentile temperature above 97.5th is 41 (95% CrI: 35-49). @fig-x-em-maps shows the annual excess mortality per 100,000 for temperatures below 2.5th and above 97.5th percentiles, it demonstrates slightly different pattern especially for hotter temperatures. Yardley East has the highest rate (7.8 per 100,000, 95% CrI 4.3–13.9) and the strongest evidence of being above the city median (Pr = 0.995). Northfield, Sutton Mere Green, Sutton Wylde Green and Castle Vale also show very strong evidence that the excess mortality attributable to hotter temperatures is higher than the overall Birmingham median excess mortality (heat: 3.58 per 100,000). For colder temperatures, Kingstanding (11.8 per 100,000, 95% CrI 6.0–16.3) shows very strong evidence that it is above the Birmingham median (Pr = 0.98). Billesley and Perry Barr also show strong evidence, and several wards in the north and south show some evidence that excess mortality in colder temperatures is higher than the overall Birmingham median excess mortality (cold: 5.37 per 100,000).
 
 ```{r data for figure 5}
 #| output: false
@@ -879,7 +880,7 @@ figure_EM_prob_Xheat = ggplot(em_exceedance_Xplot_df )+
                "Some evidence (0.80–0.90)" = "#fc9272", 
                "No evidence (<0.80)"="grey85")
   )+
-  labs(fill = "Pr(EM>mean EM)") +
+  labs(fill = "Pr(EM>median EM)") +
   ggtitle("Exceedance probability that excess mortality rate above 97.5th \npercentile in the ward is higher than the overall Birmingham mean \nheat-realted excess mortality")+
   theme_void(base_size = 16) +
   theme()
@@ -896,7 +897,7 @@ ggplot(em_exceedance_Xplot_df )+
                "Some evidence (0.80–0.90)" = "#9ecae1", 
                "No evidence (<0.80)"="grey85")
   )+
-  labs(fill = "Pr(EM>mean EM)") +
+  labs(fill = "Pr(EM>median EM)") +
   ggtitle("Exceedance probability that excess mortality rate below 2.5th \npercentile in the ward is higher than the overall Birmingham mean \nheat-realted excess mortality")+
   theme_void(base_size = 16) +
   theme()
