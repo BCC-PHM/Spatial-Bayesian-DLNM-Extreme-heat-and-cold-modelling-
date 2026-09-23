@@ -7,6 +7,7 @@ library(stringr)
 library(doParallel)
 library(foreach)
 library(doSNOW)
+library(sf)
 #==========================================================
 # PROJ setup (once)
 #point R at the folder that contains proj.db

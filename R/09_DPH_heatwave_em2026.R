@@ -117,6 +117,7 @@ heat_windows = heat_daily %>%
     Date >= as.Date("2026-05-21") & Date <= as.Date("2026-05-29") ~ "May heatwave",
     Date >= as.Date("2026-06-18") & Date <= as.Date("2026-06-30") ~ "June heatwave",
     Date >= as.Date("2026-07-06") & Date <= as.Date("2026-07-16") ~ "July heatwave",
+    Date >= as.Date("2026-08-01") & Date <= as.Date("2026-08-16") ~ "August heatwave",
     TRUE                                                          ~ NA_character_
   )) %>% 
   filter(!is.na(period))
@@ -168,6 +169,8 @@ daily_ts = bham_daily_draws %>%
   )
 print(daily_ts)
 
+#------------------------------------------------------------------------
+#june heatwave
 june_heat_plot = daily_ts %>% 
   mutate(
     period = case_when(
@@ -210,6 +213,8 @@ ggsave("figs/DPH_2026/09_june_heat_plot.png",
 
 bcc_pal("orange")(10)
 
+#------------------------------------------------------------------------
+#July heatwave
 july_heat_plot = daily_ts %>% 
   mutate(
     period = case_when(
@@ -251,7 +256,48 @@ ggsave("figs/DPH_2026/09_july_heat_plot.png",
        units = "in",
        dpi=600)
 
+#------------------------------------------------------------------------
+#August heatwave
 
+august_heat_plot = daily_ts %>% 
+  mutate(
+    period = case_when(
+      Date >= as.Date("2026-08-01") & Date <= as.Date("2026-08-16") ~ "August heatwave",
+      TRUE                                                          ~ NA_character_
+    ),
+    sufficient_evidence = if_else(Pr_positive >= 0.95, "Sufficient evidence", "Insufficient evidence")
+  ) %>% 
+  filter(!is.na(period)) %>% 
+  filter(!is.na(period)) %>% 
+  ggplot(aes(x = Date, y = AN_med)) +
+  geom_ribbon(aes(ymin = AN_LL, ymax = AN_UL), alpha = 0.2,fill = "#E9997E") +
+  geom_line(colour="#DC582A",linewidth=1) +
+  geom_point(aes(colour = sufficient_evidence), size = 3) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  scale_colour_manual(values = c(
+    "Sufficient evidence"   = "#DC582A",
+    "Insufficient evidence" = "grey30"
+  )) +
+  scale_x_date(date_breaks = "1 day", date_labels = "%d %b") +
+  labs(
+    title    = "Estimated number of heat-attributable deaths during the \nAugust 2026 heatwaves in Birmingham",
+    x        = "Date",
+    y        = "Heat-attributable deaths",
+    colour   = NULL
+  ) +
+  theme_bcc(base_size = 11,
+            gridline_x = FALSE) +
+  theme(
+    axis.text.x     = element_text(angle = 0, hjust = 0.5, size=7),
+    legend.position = "bottom"
+  )
+
+
+ggsave("figs/DPH_2026/09_august_heat_plot.png",
+       august_heat_plot  ,
+       width = pixel_2_in(707,488)[1], height = pixel_2_in(707,488)[2],
+       units = "in",
+       dpi=600)
 
 #------------------------------------------------------
 #ward-level totals
